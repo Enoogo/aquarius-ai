@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- M3T Dark Palette -->
+    <color name="m3t_message_ai_border">#49627E</color>
+    <color name="m3t_message_user_border">#5B81B2</color>
+    <color name="m3t_message_meta_bg">#252528</color>
+    <color name="m3t_message_meta_text">#F5F5F7</color>
+    <color name="m3t_voice_wave_active">#9BCBFF</color>
+    <color name="m3t_voice_wave_cancel">#FF9FA8</color>
+
+</resources>

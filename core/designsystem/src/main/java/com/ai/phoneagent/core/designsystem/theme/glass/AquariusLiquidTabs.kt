@@ -1,0 +1,462 @@
+package com.ai.phoneagent.core.designsystem.theme.glass
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
+
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastCoerceIn
+import androidx.compose.ui.util.fastRoundToInt
+import androidx.compose.ui.util.lerp
+import com.ai.phoneagent.core.designsystem.R
+import com.ai.phoneagent.core.designsystem.theme.LocalAquariusBackdrop
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
+import com.kyant.shapes.Capsule
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.sign
+
+/**
+ * 顶部滑动胶囊导航（液态玻璃版）。
+ *
+ * 结构与参考实现 `LiquidBottomTabs` 完全一致：
+ * 1. 胶囊容器：vibrancy + blur(8dp) + lens(24dp, 24dp) + 表面色；
+ * 2. 透明副本层：把同样的图标/文字以强调色渲染进 `tabsBackdrop`，供滑块折射；
+ * 3. 滑块：跟随 pager 位置，按压缩放 + 速度挤压 + 色散折射 + 内阴影；
+ * 4. 按压高光点跟随手指，松手回弹。
+ *
+ * @param progress 当前页位置（支持小数，来自 pager 的 `currentPage + currentPageOffsetFraction`）。
+ * @param pagerScrolling pager 是否正在滚动（含用户拖动与程序 tween）。
+ */
+@Composable
+fun AquariusLiquidTabs(
+    selectedIndex: Int,
+    onSelect: (index: Int) -> Unit,
+    progress: () -> Float,
+    backdrop: Backdrop,
+    modifier: Modifier = Modifier,
+    tabCount: Int = 3,
+    pagerScrolling: () -> Boolean = { false },
+    onEdgeHaptic: () -> Unit = {},
+    content: @Composable (index: Int) -> Unit,
+) {
+    val dark = LocalAquariusBackdrop.current.dark
+    val accent = MaterialTheme.colorScheme.primary
+    // 主页导航要“透明液态玻璃”：比通用 Bar 表面更透，让壁纸/内容透上来。
+    val containerColor = colorResource(
+        if (dark) R.color.aquarius_nav_surface_dark else R.color.aquarius_nav_surface_light
+    )
+    val restTint = colorResource(
+        if (dark) R.color.aquarius_liquid_selected_dark else R.color.aquarius_liquid_selected_light
+    )
+    val selectedLensHeight = dimensionResource(R.dimen.aquarius_liquid_selected_lens_height)
+    val selectedLensAmount = dimensionResource(R.dimen.aquarius_liquid_selected_lens_amount)
+    val selectedInnerShadowRadius = dimensionResource(R.dimen.aquarius_liquid_selected_inner_shadow_radius)
+    val inset = dimensionResource(R.dimen.aquarius_nav_inset_x)
+    val barHeight = dimensionResource(R.dimen.aquarius_nav_height)
+    val barBlur = dimensionResource(R.dimen.aquarius_liquid_blur_bar)
+    val barLensHeight = dimensionResource(R.dimen.aquarius_liquid_lens_bar_height)
+    val barLensAmount = dimensionResource(R.dimen.aquarius_liquid_lens_bar_amount)
+    val pressGrow = dimensionResource(R.dimen.aquarius_liquid_bar_press_grow)
+    val shape = remember { Capsule() }
+
+    val tabsBackdrop = rememberLayerBackdrop()
+    val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
+
+    BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
+        val density = LocalDensity.current
+        val tabWidthPx = with(density) { (constraints.maxWidth.toFloat() - inset.toPx() * 2f) / tabCount }
+        val insetPx = with(density) { inset.toPx() }
+        val scope = rememberCoroutineScope()
+        val offsetAnimation = remember { Animatable(0f) }
+        val panelOffset by remember(density) {
+            derivedStateOf {
+                val fraction = (offsetAnimation.value / constraints.maxWidth).fastCoerceIn(-1f, 1f)
+                with(density) { 4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction)) }
+            }
+        }
+
+        val currentOnSelect by rememberUpdatedState(onSelect)
+        val currentSettledIndex by rememberUpdatedState(selectedIndex)
+        val currentPagerScrolling by rememberUpdatedState(pagerScrolling)
+        val currentProgress by rememberUpdatedState(progress)
+        // 松手后与 pager tween 同步追赶的短暂窗口：期间仍由 drag.value 驱动滑块。
+        var catchUp by remember { mutableStateOf(false) }
+        var edgeHit by remember { mutableIntStateOf(0) }
+        val drag = remember(scope) {
+            AquariusTabDragAnimation(
+                animationScope = scope,
+                initialValue = selectedIndex.toFloat(),
+                valueRange = 0f..(tabCount - 1).toFloat(),
+                visibilityThreshold = 0.001f,
+                initialScale = 1f,
+                pressedScale = 78f / 56f,
+                onDragStopped = { settled ->
+                    // 松手吸附：目标已在抬起事件的同步点被捕获（手指此刻看到的档位），
+                    // 拖拽打断点选弹簧时从当前显示位置吸附并取消旧目标。
+                    edgeHit = 0
+                    // 整条页签带拖动时的 4dp 惯性偏移，松手必须回弹归零。
+                    scope.launch { offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f)) }
+                    if (settled != currentSettledIndex) currentOnSelect(settled)
+                    // 松手后让滑块从手指位置平滑追到目标页中心：commitTo 同步记录目标并
+                    // 启动参考弹簧 spring(1f,1000f)（DampedDragAnimation.valueAnimationSpec），
+                    // 与拖拽跟手同源，含按压→到位→松开的形变编排。catchUp 的解除不在这里
+                    // 立刻发生：弹簧通常比 pager 的 360ms tween 先到，若此刻交还 pager 进度，
+                    // 滑块会被半程进度拉回去再追一次，表现为松手后“回弹一下”。
+                    // 解除时机由下方 snapshotFlow 统一裁决（以 committedTarget 为准）。
+                    catchUp = true
+                    commitTo(settled)
+                },
+                onDrag = { _, dragAmount ->
+                    dragBy(dragAmount.x / tabWidthPx)
+                    scope.launch { offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x) }
+                    val edge = when {
+                        targetValue <= 0f -> -1
+                        targetValue >= tabCount - 1 -> 1
+                        else -> 0
+                    }
+                    if (dragAmount.x != 0f && edge != 0 && edge != edgeHit) onEdgeHaptic()
+                    edgeHit = edge
+                },
+            )
+        }
+
+        // 仲裁收集器：决定滑块位置何时由本地弹簧驱动、何时交还 pager 进度。
+        // 优先级（高→低）：pager 用户滚动 > 手指按压/追赶弹簧 > pager 进度贴附。
+        // catchUp 与滑块位置都在监听键里：点击的同步状态写入会立刻触发裁决，
+        // 不必等弹簧协程被调度后 isAnimating/targetValue 才翻转。
+        LaunchedEffect(drag) {
+            val catchUpThreshold = (tabCount - 1).toFloat() * 0.025f
+            var pagerWasScrolling = false
+            snapshotFlow {
+                PagerDriveState(
+                    pagerScrolling = currentPagerScrolling(),
+                    catchUp = catchUp,
+                    animating = drag.isAnimating,
+                    pressed = drag.isPressed,
+                )
+            }
+                .collectLatest { state ->
+                    val progress = currentProgress().fastCoerceIn(0f, (tabCount - 1).toFloat())
+                    if (state.pagerScrolling) {
+                        // pager 正被用户拖动/惯性滚动：最高优先级。立即取消未完成的
+                        // 点选弹簧并贴附 pager 进度，否则松手吸附会把滑块从手指
+                        // 下的页面拉走——用户滑动永远拥有滑块。
+                        pagerWasScrolling = true
+                        if (catchUp || drag.value != progress) {
+                            catchUp = false
+                            drag.snapToValue(progress)
+                        }
+                        return@collectLatest
+                    }
+                    if (pagerWasScrolling) {
+                        // pager 刚停：把本地值对齐到落定位置，避免下一次按住胶囊时
+                        // 从上一次停留的旧位置起跳。
+                        pagerWasScrolling = false
+                        catchUp = false
+                        drag.snapToValue(progress)
+                    }
+                    if (state.pressed) return@collectLatest
+                    if (state.catchUp) {
+                        // 追赶中：弹簧已结束、滑块已实际抵达最近提交的目标
+                        // （committedTarget——同步更新，不受弹簧协程排队延迟影响）、
+                        // 且 pager 已落定在同一目标页时，才把位置交还 pager 进度。
+                        // 三个条件缺一不可，消除快速连点/松手吸附后
+                        // “弹簧尚未起飞就被判空闲，先 snap 回旧页再重新起飞”的竞态。
+                        val arrived = abs(drag.value - drag.committedTargetIndex) < catchUpThreshold
+                        if (!state.animating && arrived && currentSettledIndex == drag.committedTargetIndex) {
+                            catchUp = false
+                            drag.snapToValue(progress)
+                        }
+                    } else {
+                        drag.snapToValue(progress)
+                    }
+                }
+        }
+
+        val press = rememberAquariusPressState(
+            position = { size, _ ->
+                Offset(
+                    x = insetPx + (drag.value + 0.5f) * tabWidthPx + panelOffset,
+                    y = size.height / 2f,
+                )
+            }
+        )
+        // 滑块位置仲裁：pager 用户滚动时无条件贴 pager 进度；手指按住或松手追赶
+        // 弹簧时由本地值驱动；其余时间直接贴 pager 分数。位置在 graphicsLayer 内
+        // 逐帧读取，不经过 recompose，保证左右滑动逐帧跟手。
+        val sliderPosition: () -> Float = {
+            when {
+                currentPagerScrolling() -> currentProgress().fastCoerceIn(0f, (tabCount - 1).toFloat())
+                drag.isPressed || catchUp -> drag.value
+                else -> currentProgress().fastCoerceIn(0f, (tabCount - 1).toFloat())
+            }
+        }
+
+        // UI 测试钩子：每帧把滑块状态写给读取器（仅测试提供 Local 时存在）。
+        val tabsStateReader = LocalAquariusLiquidTabsStateReader.current
+        if (tabsStateReader != null) {
+            LaunchedEffect(drag, tabsStateReader) {
+                while (true) {
+                    withFrameNanos { }
+                    tabsStateReader.sliderPosition = sliderPosition()
+                    tabsStateReader.retargetVelocity = drag.lastRetargetVelocity
+                }
+            }
+        }
+
+        // 1) 胶囊容器 + 可见内容（对齐参考 LiquidBottomTabs:161-188 的单层结构）：
+        //    内容直接画在玻璃层里，表面色 40% alpha 盖在上面，内容仍透出可读。
+        // 参考实现只放大供滑块采样的透明副本，可见页签本身保持 1x。
+        CompositionLocalProvider(LocalAquariusTabScale provides { 1f }) {
+            Row(
+                Modifier
+                    .graphicsLayer { translationX = panelOffset }
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { shape },
+                        effects = {
+                            vibrancy()
+                            blur(barBlur.toPx())
+                            lens(barLensHeight.toPx(), barLensAmount.toPx())
+                        },
+                        layerBlock = {
+                            val scale = lerp(1f, 1f + pressGrow.toPx() / size.width, drag.pressProgress)
+                            scaleX = scale
+                            scaleY = scale
+                        },
+                        onDrawSurface = {
+                            // onDrawSurface 不带 shape 裁剪，必须自己 clipPath 再画表面色。
+                            clipPath(aquariusShapePath(shape)) { drawRect(containerColor) }
+                        },
+                    )
+                    // 容器的按压高光按胶囊裁剪，避免直角矩形亮块。
+                    .clip(shape)
+                    .then(press.highlightModifier(shape))
+                    .height(barHeight)
+                    .fillMaxWidth()
+                    .padding(inset),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                repeat(tabCount) { index ->
+                    TabSlot(
+                        onClick = {
+                            // 对齐参考 LiquidBottomTabs:139-146 的点击动效：点按页签时
+                            // 滑块以参考弹簧 spring(1f,1000f) 直达目标页（commitTo 内含
+                            // 按压→到位→松开的形变编排），领先于 pager 的 360ms tween。
+                            // 每次点击都提交（同目标连点只延续进度不重启弹簧），
+                            // commitTo 同步记录目标，仲裁方读 committedTarget 不受
+                            // 弹簧协程排队延迟影响；最新点击总是获胜。
+                            catchUp = true
+                            drag.commitTo(index)
+                            currentOnSelect(index)
+                        },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    ) {
+                        content(index)
+                    }
+                }
+            }
+        }
+        CompositionLocalProvider(LocalAquariusTabScale provides {
+            lerp(1f, 1.2f, drag.pressProgress)
+        }) {
+            Row(
+                Modifier
+                    .clearAndSetSemantics {}
+                    .alpha(0f)
+                    .layerBackdrop(tabsBackdrop)
+                    .graphicsLayer { translationX = panelOffset }
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { shape },
+                        effects = {
+                            val p = drag.pressProgress
+                            vibrancy()
+                            blur(barBlur.toPx())
+                            lens(barLensHeight.toPx() * p, barLensAmount.toPx() * p)
+                        },
+                        highlight = { Highlight.Default.copy(alpha = drag.pressProgress) },
+                        onDrawSurface = {
+                            // onDrawSurface 不带 shape 裁剪，必须自己 clipPath 再画表面色。
+                            clipPath(aquariusShapePath(shape)) { drawRect(containerColor) }
+                        },
+                    )
+                    .height(barHeight - inset * 2)
+                    .fillMaxWidth()
+                    .padding(horizontal = inset)
+                    .graphicsLayer(colorFilter = ColorFilter.tint(accent)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                repeat(tabCount) { index ->
+                    Box(Modifier.weight(1f).fillMaxHeight()) { content(index) }
+                }
+            }
+        }
+
+        // 3) 选中滑块（玻璃折射层，位于可见内容之上，对齐参考 LiquidBottomTabs:231-286 的层级）：
+        //    静止时 highlight/shadow/lens 全为 0，只剩 10% tint；按压/拖动时 lens 全量
+        //    折射副本层，不透明采样盖住下方真实文字，避免双层文字叠加。
+        Box(
+            Modifier
+                .padding(horizontal = inset)
+                .graphicsLayer { translationX = sliderPosition() * tabWidthPx + panelOffset }
+                .testTag(AquariusLiquidTabSliderTestTag)
+                // 手势直接挂在滑块层上，与参考 LiquidBottomTabs:239-240 一致。
+                .then(press.gestureModifier)
+                .then(drag.modifier)
+                .drawBackdrop(
+                    backdrop = combinedBackdrop,
+                    shape = { shape },
+                    effects = {
+                        // 对齐参考 LiquidBottomTabs:244-250：lens 随按压进度从 0 增到
+                        // 10/14dp 全量并常开色散；静止时无折射，仅剩 10% tint。
+                        val p = drag.pressProgress
+                        lens(
+                            selectedLensHeight.toPx() * p,
+                            selectedLensAmount.toPx() * p,
+                            chromaticAberration = true,
+                        )
+                    },
+                    highlight = {
+                        Highlight.Default.copy(alpha = drag.pressProgress)
+                    },
+                    shadow = { Shadow(alpha = drag.pressProgress) },
+                    innerShadow = {
+                        InnerShadow(
+                            radius = selectedInnerShadowRadius * drag.pressProgress,
+                            alpha = drag.pressProgress,
+                        )
+                    },
+                    layerBlock = {
+                        scaleX = drag.scaleX
+                        scaleY = drag.scaleY
+                        val velocity = drag.velocity / 10f
+                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                    },
+                    onDrawSurface = {
+                        // 滑块表面色同样要按胶囊裁剪（按压缩放 1.39x 时会泄出矩形）。
+                        // 对齐参考 LiquidBottomTabs:274-281：静止 tint 10%，按压时淡出。
+                        clipPath(aquariusShapePath(Capsule())) {
+                            drawRect(restTint, alpha = 1f - drag.pressProgress)
+                            drawRect(Color.Black.copy(alpha = 0.03f * drag.pressProgress))
+                        }
+                    },
+                )
+                .height(barHeight - inset * 2)
+                .fillMaxWidth(1f / tabCount),
+        )
+    }
+}
+
+/** 可见 tab 槽位：点击 + 按压放大。 */
+@Composable
+private fun TabSlot(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val scale = LocalAquariusTabScale.current
+    Box(
+        modifier
+            .graphicsLayer {
+                val s = scale()
+                scaleX = s
+                scaleY = s
+            }
+            .clip(Capsule())
+            .clickable(
+                interactionSource = null,
+                indication = null,
+                role = Role.Tab,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
+/** 文字/图标的按压放大比例，由 [AquariusLiquidTabs] 提供。 */
+val LocalAquariusTabScale = staticCompositionLocalOf { { 1f } }
+
+/** UI 测试钩子：选中滑块节点的 testTag（供手势注入定位）。 */
+const val AquariusLiquidTabSliderTestTag = "aquarius_liquid_tab_slider"
+
+/**
+ * UI 测试钩子：[AquariusLiquidTabs] 的实时状态读取器。
+ * 通过 [LocalAquariusLiquidTabsStateReader] 提供时，组件每帧写出滑块位置与改点
+ * 继承速度，供 Robolectric 合成测试在 mainClock 推帧后读取。语义属性无法保证
+ * 逐帧刷新，故测试数据走此通道；生产代码不提供该 Local，零开销。
+ */
+class AquariusLiquidTabsStateReader internal constructor() {
+    /** 滑块当前绘制位置（页签单位，支持小数）。 */
+    var sliderPosition: Float = 0f
+        internal set
+
+    /** 最近一次改点（retarget）继承的飞行速度（页签/秒）。 */
+    var retargetVelocity: Float = 0f
+        internal set
+}
+
+/** UI 测试钩子：提供 [AquariusLiquidTabsStateReader] 以逐帧收集滑块状态。 */
+val LocalAquariusLiquidTabsStateReader = staticCompositionLocalOf<AquariusLiquidTabsStateReader?> { null }
+
+/** 仲裁收集器的输入快照：pager 滚动、追赶窗口、弹簧与按压状态。 */
+private data class PagerDriveState(
+    val pagerScrolling: Boolean,
+    val catchUp: Boolean,
+    val animating: Boolean,
+    val pressed: Boolean,
+)
