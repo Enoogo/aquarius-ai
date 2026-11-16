@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English UI strings (terse). Mirrors feature/settings values/onboarding_strings.xml. -->
+<resources>
+    <string name="action_close">Close</string>
+    <string name="automation_shizuku_permission_requested">Shizuku prompt sent. Confirm it.</string>
+    <string name="user_agreement_desc">Read and accept to continue setup.</string>
+    <string name="user_agreement_action_next">Next</string>
+    <string name="user_agreement_content"><![CDATA[
+        Welcome to Aquarius AI ("this project"). Read and accept these terms before use. If you disagree, stop using the app.<br/><br/>
+        <b>1. License</b><br/>
+        1. Released under the GNU Affero General Public License v3 (AGPL v3). You must follow all of its terms.<br/>
+        2. You may copy, distribute, modify and use this project under that license, but must keep all copyright and license notices.<br/>
+        3. If you run this project as a network service, you must publish the complete source code, including your changes.<br/><br/>
+        <b>2. No warranty; limitation of liability</b><br/>
+        1. Provided "as is", without any express or implied warranty, including merchantability, fitness for a particular purpose and non-infringement.<br/>
+        2. To the maximum extent permitted by law, the developer and contributors are not liable for any direct, indirect, incidental, special, punitive or consequential damages arising from use of, or inability to use, this project.<br/><br/>
+        <b>3. Your responsibilities</b><br/>
+        1. Use this project lawfully. Do not use it for illegal, infringing, commercial or large-scale automated operations.<br/>
+        2. Do not use this project to build, operate or assist commercial services without written permission.<br/>
+        3. You are responsible for any third-party claims or losses caused by your breach of these terms.<br/><br/>
+        <b>4. Privacy</b><br/>
+        1. This project does not collect, store or upload personal information; data is processed on your device.<br/>
+        2. Your data is not used for unauthorized purposes or shared without consent.<br/>
+        3. You may review this policy at any time.<br/><br/>
+        <b>5. Changes and termination</b><br/>
+        1. The developer may revise these terms and will announce changes in the app. Continued use means acceptance.<br/>
+        2. The developer may suspend your right to use this project if you breach these terms.<br/><br/>
+        <b>6. Miscellaneous</b><br/>
+        1. These terms are governed by the laws of the People\'s Republic of China.<br/>
+        2. Invalid provisions do not affect the remaining ones.<br/>
+        3. The developer holds final interpretation rights.<br/><br/>
+        <b>7. Commercial use</b><br/>
+        1. Commercial use requires written permission, including resale, paid services, cloud/API hosting and app store distribution.<br/>
+        2. For commercial use or cooperation, contact:<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;<b>Email: enoogo@qq.com</b><br/>
+        3. Unauthorized commercial use is a breach of these terms.
+    ]]></string>
+    <string name="perm_sheet_title">Finish setup</string>
+    <string name="perm_sheet_desc">These permissions enable voice, floating window and automation.</string>
+    <string name="perm_sheet_shizuku_title">Set up with Shizuku</string>
+    <string name="perm_sheet_shizuku_desc">With Shizuku connected and allowed, Aquarius grants accessibility, overlay and microphone permissions automatically.</string>
+    <string name="perm_sheet_section_title">Required</string>
+    <string name="perm_sheet_accessibility_title">Accessibility</string>
+    <string name="perm_sheet_accessibility_desc">Runs taps, swipes and back actions.</string>
+    <string name="perm_sheet_overlay_title">Floating window</string>
+    <string name="perm_sheet_overlay_desc">Shows the floating entry and assistant panel.</string>
+    <string name="perm_sheet_status_ready">Ready</string>
+    <string name="perm_sheet_status_pending">Pending</string>
+    <string name="perm_sheet_action_enable">Enable</string>
+    <string name="perm_sheet_action_settings">Settings</string>
+    <string name="perm_sheet_action_grant">Allow</string>
+    <string name="perm_sheet_action_ready">Done</string>
+    <string name="perm_sheet_primary_action">Finish setup</string>
+    <string name="perm_sheet_primary_action_ready">Start</string>
+    <string name="perm_sheet_secondary_action">Later</string>
+    <string name="perm_sheet_shizuku_success">Permissions granted via Shizuku</string>
+    <string name="onboarding_welcome_title">Welcome to Aquarius AI</string>
+    <string name="onboarding_welcome_desc">Read the terms and grant permissions to begin.</string>
+    <string name="onboarding_welcome_action">Continue</string>
+</resources>

@@ -1,0 +1,498 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  English UI strings.
+  Deliberately terse: labels over sentences, no filler.
+  Keys must mirror values/strings.xml one-to-one (missing keys fall back to Chinese).
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <string name="app_name">Aquarius AI</string>
+    <string name="app_title">Aquarius AI</string>
+
+    <string name="status_ready">Voice model ready</string>
+    <string name="status_disconnected">No model</string>
+    <string name="status_connected">Model connected</string>
+    <string name="status_connected_with_voice">Model connected | Voice ready</string>
+    <string name="status_disconnected_short">Offline</string>
+    <string name="status_disconnected_with_voice">Offline | Voice ready</string>
+    <string name="status_checking">Checking…</string>
+    <string name="status_checking_with_voice">Voice ready | Checking API…</string>
+
+    <string name="common_copy">Copy</string>
+    <string name="common_edit">Edit</string>
+
+    <string name="input_hint">Tell Aquarius what to do</string>
+    <string name="voice_input">Voice input</string>
+    <string name="input_attachment">Attach</string>
+    <string name="input_attachment_ready">Attached</string>
+    <string name="input_switch_keyboard">Keyboard</string>
+    <string name="input_hold_to_talk">Hold to talk</string>
+    <string name="input_stop_generating">Stop</string>
+    <string name="voice_release_to_cancel">Swipe up to cancel</string>
+    <string name="voice_release_to_transcribe">Release to send</string>
+    <string name="send">Send</string>
+    <string name="ai_generated_notice">AI-generated</string>
+    <string name="chat_server_busy">Server busy. Try again shortly.</string>
+    <string name="retry">Retry</string>
+    <string name="retrying">Retrying…</string>
+
+    <string name="automation_confirm">Confirm</string>
+    <string name="automation_confirming">Running…</string>
+    <string name="automation_confirmed">Done</string>
+    <string name="automation_rejected">Declined</string>
+    <string name="automation_terminate">Stop task</string>
+    <string name="automation_terminating">Stopping…</string>
+    <string name="automation_terminate_requested">Stop requested</string>
+    <string name="automation_done">Done</string>
+    <string name="automation_retry">Retry</string>
+    <string name="automation_start_now">Start</string>
+    <string name="automation_execute_now">Run</string>
+    <string name="automation_not_ready_short">Not ready</string>
+    <string name="automation_confirm_hint">Automation task detected. Tap Confirm to run.</string>
+    <string name="automation_dispatched">Sent to automation</string>
+    <string name="automation_dispatch_failed">Automation failed to start: %1$s</string>
+    <string name="automation_scene_title">Automation</string>
+    <string name="automation_scene_need_confirm">Needs confirmation</string>
+    <string name="automation_scene_confirmed">Confirmed</string>
+    <string name="automation_scene_rejected">Declined</string>
+    <string name="automation_scene_not_ready">System not ready</string>
+    <string name="automation_setup_go_enable">Enable</string>
+    <string name="automation_setup_enable_accessibility">Enable accessibility</string>
+    <string name="automation_setup_accessibility_enabled">Accessibility enabled via Shizuku</string>
+    <string name="automation_scene_running">Running</string>
+    <string name="automation_scene_finished">Finished</string>
+    <string name="automation_scene_waiting">Waiting for logs…</string>
+    <string name="automation_scene_collapse">Collapse panel</string>
+    <string name="automation_scene_expand">Expand panel</string>
+
+    <string name="message_user_label">You</string>
+    <string name="message_thinking_label">Reasoning</string>
+    <string name="message_streaming_label">Generating</string>
+    <string name="message_streaming_placeholder">Thinking…</string>
+    <string name="message_connecting_placeholder">Connecting</string>
+    <string name="message_local_inference_waiting">Running locally…</string>
+
+    <string name="transcript_empty_hint">Describe a task. Aquarius will handle it.</string>
+    <string name="transcript_empty_suggestion_title">Try</string>
+    <string name="transcript_empty_suggestion_subtitle">Tap to fill the input</string>
+    <string name="transcript_empty_brand_tagline">A new way to use your phone</string>
+    <string name="transcript_empty_brand_caption">Tickets, food delivery, messages — one sentence.</string>
+    <string name="transcript_suggestion_open_wechat_label">Open and search</string>
+    <string name="transcript_suggestion_summarize_page_label">Summarize screen</string>
+    <string name="transcript_suggestion_set_alarm_label">Set alarm</string>
+    <string name="transcript_suggestion_open_wechat">Open WeChat and search a contact</string>
+    <string name="transcript_suggestion_summarize_page">Screenshot and summarize this page</string>
+    <string name="transcript_suggestion_set_alarm">Set an alarm for 8am tomorrow</string>
+
+    <string name="automation_toolbar_title">Automation</string>
+    <string name="automation_console_overview_title">Automation</string>
+    <string name="automation_console_overview_subtitle">Check channel status, pick a mode, start a task.</string>
+    <string name="automation_console_runtime_title">Status</string>
+    <string name="automation_console_runtime_subtitle">Availability, channel and virtual display.</string>
+    <string name="automation_console_interaction_mode_label">Channel</string>
+    <string name="automation_console_mode_subtitle">Run on this screen, or isolate in a background virtual display.</string>
+    <string name="automation_console_shizuku_subtitle">Use Shizuku for permissions and input.</string>
+    <string name="automation_console_auto_approve_subtitle">Auto-confirm tasks started from Home.</string>
+    <string name="automation_console_task_subtitle">Describe one clear goal.</string>
+    <string name="automation_console_recommend_title">Suggested</string>
+    <string name="automation_console_recommend_action">Fill</string>
+    <string name="automation_console_controls_title">Controls</string>
+    <string name="automation_console_controls_subtitle">Pause, resume or stop at any time.</string>
+    <string name="automation_console_log_subtitle">Live progress and key feedback.</string>
+    <string name="automation_console_mode_selected">Selected</string>
+    <string name="automation_refresh_status">Refresh</string>
+    <string name="automation_execution_mode_label">Execution</string>
+    <string name="automation_execution_background_experimental">Background (experimental)</string>
+    <string name="automation_execution_background_experimental_summary">Off: on-screen. On: isolated virtual display via Shizuku.</string>
+    <string name="automation_execution_front_mode">Foreground (visible)</string>
+    <string name="automation_mode_description_front">Runs on your screen so you can watch every step.</string>
+    <string name="automation_virtual_display_status_default">Virtual display: not initialized</string>
+    <string name="automation_virtual_display_status_label">Virtual display</string>
+    <string name="automation_virtual_display_status_creating">Virtual display: creating…</string>
+    <string name="automation_virtual_display_status_running">Virtual display: running (displayId=%1$s)</string>
+    <string name="automation_virtual_display_status_failed">Virtual display: failed</string>
+    <string name="automation_virtual_display_status_preparing">Virtual display: preparing…</string>
+    <string name="automation_virtual_display_status_not_started">Virtual display: stopped</string>
+    <string name="automation_virtual_display_status_running_detail">Virtual display: running | ID=%1$s | %2$s</string>
+    <string name="automation_virtual_display_status_error">Virtual display: error - %1$s</string>
+    <string name="automation_shizuku_mode_label">Shizuku mode</string>
+    <string name="automation_task_confirm_label">Task confirmation</string>
+    <string name="automation_card_title">Aquarius Automation</string>
+    <string name="automation_task_hint">Enter a task…</string>
+    <string name="automation_task_hint_not_ready">Finish setup for this mode first</string>
+    <string name="automation_action_launch">Launch</string>
+    <string name="automation_action_tap">Tap</string>
+    <string name="automation_action_back">Back</string>
+    <string name="automation_action_input">Type</string>
+    <string name="automation_action_swipe">Swipe</string>
+    <string name="automation_actions_more">+ %1$d</string>
+    <string name="automation_pause">Pause</string>
+    <string name="automation_resume">Resume</string>
+    <string name="automation_stop">Stop</string>
+    <string name="automation_log_system_label">Run log</string>
+    <string name="automation_log_default">Ready. Waiting for input…</string>
+    <string name="automation_scene_stop_requested">Stopping</string>
+    <string name="automation_terminate_timeout_retry">Stop timed out. Try again.</string>
+    <string name="automation_status_label">Status</string>
+    <string name="automation_accessibility_status_default">Accessibility: off</string>
+    <string name="automation_execution_background_mode">Background (virtual display)</string>
+    <string name="automation_mode_description_background">Runs in a virtual display without touching your screen.</string>
+    <string name="automation_recommend_task_default">Try: check the battery level</string>
+    <string name="automation_open_accessibility">Enable</string>
+    <string name="automation_one_tap_shizuku_authorize">Authorize</string>
+    <string name="automation_auto_approve_label">Auto-confirm on Home (10s)</string>
+    <string name="automation_confirm_countdown">Confirm (%1$ds)</string>
+    <string name="automation_shizuku_not_connected">Shizuku not connected</string>
+    <string name="automation_shizuku_permission_requested">Shizuku prompt sent. Confirm it.</string>
+    <string name="automation_shizuku_authorize_success">Accessibility enabled via Shizuku</string>
+    <string name="automation_shizuku_authorize_failed">Shizuku could not enable accessibility. Enable it manually.</string>
+    <string name="automation_status_accessibility_connected">Accessibility: connected</string>
+    <string name="automation_status_accessibility_enabled_waiting">Accessibility: on (connecting)</string>
+    <string name="automation_status_accessibility_disabled">Accessibility: off</string>
+    <string name="automation_status_shizuku_ready">Shizuku: connected and allowed</string>
+    <string name="automation_status_shizuku_waiting_permission">Shizuku: connected (not allowed)</string>
+    <string name="automation_status_shizuku_disconnected">Shizuku: not connected</string>
+    <string name="automation_status_summary_ready">Ready</string>
+    <string name="automation_status_summary_need_background_shizuku">Not ready: background mode needs Shizuku</string>
+    <string name="automation_status_summary_need_shizuku_connection">Not ready: Shizuku offline</string>
+    <string name="automation_status_summary_need_shizuku_permission">Not ready: Shizuku not allowed</string>
+    <string name="automation_status_summary_need_accessibility_enabled">Not ready: accessibility off</string>
+    <string name="automation_status_summary_need_accessibility_connection">Not ready: accessibility connecting</string>
+    <string name="automation_status_summary_shizuku_detected">Not ready: enable Shizuku mode</string>
+    <string name="automation_status_summary_need_accessibility_generic">Not ready: accessibility offline</string>
+    <string name="automation_status_mode_shizuku">Channel: Shizuku</string>
+    <string name="automation_status_mode_accessibility">Channel: Accessibility</string>
+    <string name="automation_status_accessibility_short_label">Accessibility</string>
+    <string name="automation_status_shizuku_short_label">Shizuku</string>
+    <string name="automation_background_requires_shizuku">Background mode needs Shizuku</string>
+    <string name="automation_background_requires_shizuku_permission">Background mode needs Shizuku permission. Confirm the prompt, then retry.</string>
+
+    <string name="accessibility_service_label">Aquarius AI Automation</string>
+    <string name="accessibility_service_desc">Runs taps, swipes and back actions for automation. Must be enabled in system accessibility settings.</string>
+
+    <string name="about_copyright">© 2025-2026 Aquarius AI. All rights reserved.</string>
+    <string name="about_back">Back</string>
+    <string name="about_title">About</string>
+    <string name="about_version_format">%1$s</string>
+    <string name="about_prompt_version_format">Prompt: %1$s</string>
+    <string name="about_check_updates">Check for updates</string>
+    <string name="about_checking_updates">Checking…</string>
+    <string name="about_changelog">Changelog</string>
+    <string name="about_open_source_licenses">Open source licenses</string>
+    <string name="about_developer_info">Developer</string>
+    <string name="about_developer_name">Enoogo</string>
+    <string name="about_developer_alias">Enoogo</string>
+    <string name="about_contact">Contact: enoogo@qq.com</string>
+    <string name="about_contact_copied">Email copied</string>
+    <string name="about_thanks">Thanks for using Aquarius AI</string>
+    <string name="about_local_model_download_button_shown">Download button shown</string>
+    <string name="about_local_model_download_button_hidden">Download button hidden</string>
+    <string name="about_no_changelog">(No notes)</string>
+    <string name="about_open_release">Open release</string>
+    <string name="about_release_page">Releases</string>
+    <string name="about_update_found_format">New version %1$s</string>
+    <string name="about_update_repo_subtitle">%1$s/%2$s · %3$s</string>
+    <string name="about_link_copied">Link copied</string>
+    <string name="about_choose_download_source">Choose source</string>
+    <string name="about_no_release_found">No release found.</string>
+    <string name="about_up_to_date">Up to date</string>
+    <string name="about_current_version_format">Version: %1$s</string>
+    <string name="about_check_failed">Update check failed</string>
+    <string name="about_license_format">License: %1$s</string>
+    <string name="about_open_url_failed">Cannot open page</string>
+    <string name="about_release_action_failed_format">Failed: %1$s</string>
+    <string name="about_history_tip">Older versions below</string>
+
+    <string name="update_apk_missing_fallback_release">No APK found. Opening releases.</string>
+    <string name="update_download_title_format">Download %1$s</string>
+    <string name="update_download_service_unavailable">Download service unavailable</string>
+    <string name="update_download_failed_unknown">Unknown error</string>
+    <string name="update_download_enqueue_failed_format">Could not start download: %1$s</string>
+    <string name="update_download_started_format">Downloading %1$s</string>
+    <string name="update_download_failed_reason_format">Download failed (reason=%1$d)</string>
+    <string name="update_download_submit_failed">Download not submitted. Try again.</string>
+    <string name="update_open_detail_failed">Cannot open update details</string>
+    <string name="voice_finalize_timeout_cancelled">Voice timed out. Recording cancelled.</string>
+
+    <string name="action_ok">OK</string>
+    <string name="action_close">Close</string>
+    <string name="action_cancel">Cancel</string>
+
+    <string name="user_agreement_title">Terms &amp; Privacy</string>
+    <string name="user_agreement_agree">I have read and agree</string>
+    <string name="user_agreement_content"><![CDATA[
+        Welcome to Aquarius AI ("this project"). Read and accept these terms before use. If you disagree, stop using the app.<br/><br/>
+        <b>1. License</b><br/>
+        1. Released under the GNU Affero General Public License v3 (AGPL v3). You must follow all of its terms.<br/>
+        2. You may copy, distribute, modify and use this project under that license, but must keep all copyright and license notices.<br/>
+        3. If you run this project as a network service, you must publish the complete source code, including your changes.<br/><br/>
+        <b>2. No warranty; limitation of liability</b><br/>
+        1. Provided "as is", without any express or implied warranty, including merchantability, fitness for a particular purpose and non-infringement.<br/>
+        2. To the maximum extent permitted by law, the developer and contributors are not liable for any direct, indirect, incidental, special, punitive or consequential damages arising from use of, or inability to use, this project, including data loss, business interruption or lost profits, even if advised of such damages.<br/><br/>
+        <b>3. Your responsibilities</b><br/>
+        1. Use this project lawfully. Do not use it for illegal, infringing, commercial or large-scale automated operations, or any use that violates the license.<br/>
+        2. Do not use this project to build, operate or assist commercial services without written permission from the developer.<br/>
+        3. You are solely responsible for any third-party claims, losses or costs caused by your breach of these terms or applicable law.<br/><br/>
+        <b>4. Privacy</b><br/>
+        1. This project respects your privacy. Unless stated otherwise, it does not collect, store or upload personal information; data is processed on your device.<br/>
+        2. Your data is not used for unauthorized purposes or shared with third parties without legal obligation or your explicit consent.<br/>
+        3. You may review this policy at any time.<br/><br/>
+        <b>5. Changes and termination</b><br/>
+        1. The developer may revise these terms at any time and will announce changes in the app. Continued use means acceptance.<br/>
+        2. The developer may suspend or terminate your right to use this project if you breach these terms.<br/><br/>
+        <b>6. Miscellaneous</b><br/>
+        1. These terms are governed by the laws of the People\'s Republic of China.<br/>
+        2. If any provision is held invalid or unenforceable, the remaining provisions stay in effect.<br/>
+        3. The developer holds final interpretation rights.<br/><br/>
+        <b>7. Commercial use</b><br/>
+        1. Commercial use requires written permission, including:<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;• bundling into commercial products or services for sale<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;• offering paid automation services<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;• providing it as a cloud service or API<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;• publishing apps that include this project on app stores<br/>
+        2. For commercial use, technical cooperation, custom development or OEM/ODM, contact the developer:<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;<b>Email: enoogo@qq.com</b><br/>
+        3. The developer decides on commercial cooperation. Unauthorized commercial use is a breach of these terms.
+    ]]></string>
+
+    <string name="perm_sheet_title">Finish setup</string>
+    <string name="perm_sheet_desc">These permissions enable voice, floating window and automation.</string>
+    <string name="perm_sheet_shizuku_title">Set up with Shizuku</string>
+    <string name="perm_sheet_shizuku_desc">With Shizuku connected and allowed, Aquarius grants accessibility and overlay permissions automatically.</string>
+    <string name="perm_sheet_section_title">Required</string>
+    <string name="perm_sheet_accessibility_title">Accessibility</string>
+    <string name="perm_sheet_accessibility_desc">Runs taps, swipes and back actions.</string>
+    <string name="perm_sheet_overlay_title">Floating window</string>
+    <string name="perm_sheet_overlay_desc">Shows the floating entry and assistant panel.</string>
+    <string name="perm_sheet_status_ready">Ready</string>
+    <string name="perm_sheet_status_pending">Pending</string>
+    <string name="perm_sheet_action_enable">Enable</string>
+    <string name="perm_sheet_action_settings">Settings</string>
+    <string name="perm_sheet_action_ready">Done</string>
+    <string name="perm_sheet_primary_action">Finish setup</string>
+    <string name="perm_sheet_primary_action_ready">Start</string>
+    <string name="perm_sheet_secondary_action">Later</string>
+    <string name="perm_sheet_shizuku_success">Permissions granted via Shizuku</string>
+
+    <string name="user_agreement_desc">Read and accept to continue setup.</string>
+    <string name="user_agreement_action_next">Next</string>
+    <string name="onboarding_welcome_title">Welcome to Aquarius AI</string>
+    <string name="onboarding_welcome_desc">Read the terms and grant permissions to begin.</string>
+    <string name="onboarding_welcome_action">Continue</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_search_hint">Search settings</string>
+    <string name="settings_search_results">Results</string>
+    <string name="settings_search_empty">No matching settings</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_model_automation">Model &amp; automation</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_entry_appearance_title">Appearance</string>
+    <string name="settings_entry_appearance_subtitle">Theme, language, text and display</string>
+
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_summary">App language</string>
+    <string name="settings_language_zh">简体中文</string>
+    <string name="settings_language_en">English</string>
+    <string name="settings_section_overlay">Floating window</string>
+    <string name="settings_section_overlay_hint">Visibility, corner resize and text size</string>
+    <string name="settings_overlay_enable_title">Floating window</string>
+    <string name="settings_overlay_enable_on">On · shown while a task runs</string>
+    <string name="settings_overlay_enable_off">Off · turns on immediately</string>
+    <string name="settings_overlay_particle_title">Edge particles</string>
+    <string name="settings_overlay_particle_on">On · particles orbit the border</string>
+    <string name="settings_overlay_particle_off">Off · no particles, no animation</string>
+    <string name="settings_overlay_text_size_title">Body text size</string>
+    <string name="settings_overlay_text_size_subtitle">Status line and log text, in sp</string>
+    <string name="settings_overlay_stop_size_title">"Stop task" size</string>
+    <string name="settings_overlay_hide_size_title">"Hide / Show" size</string>
+    <string name="settings_overlay_plus_size_title">"+" size</string>
+    <string name="settings_overlay_size_subtitle">In sp</string>
+    <string name="settings_overlay_corner_title">Corner drag radius</string>
+    <string name="settings_overlay_corner_subtitle">Touch radius for corner resize, in pixels (0 disables corner drag)</string>
+    <string name="settings_overlay_corner_unit">px</string>
+    <string name="settings_overlay_corner_reset">Reset</string>
+
+    <string name="settings_haptics_title">Haptics</string>
+    <string name="settings_haptics_subtitle_on">On · system keyboard feedback</string>
+    <string name="settings_haptics_subtitle_off">Off · no vibration</string>
+    <string name="settings_section_haptics">Feedback</string>
+
+    <string name="settings_entry_model_api_title">Model &amp; API</string>
+    <string name="settings_entry_model_api_subtitle">Remote API, local model, connection test</string>
+    <string name="settings_entry_automation_title">Automation</string>
+    <string name="settings_entry_automation_subtitle">Background mode, permissions, status</string>
+    <string name="settings_entry_about_title">About</string>
+    <string name="settings_entry_about_subtitle">Version, licenses, help</string>
+    <string name="settings_appearance_coming_soon">Appearance is not available yet</string>
+
+    <string name="settings_section_api">Model &amp; API</string>
+    <string name="settings_api_description">Configure a remote API or a local model here.</string>
+    <string name="settings_model_api_summary_title">Overview</string>
+    <string name="settings_model_api_summary_subtitle">Configuration for the selected provider.</string>
+    <string name="settings_model_api_mode_title">Provider</string>
+    <string name="settings_model_api_mode_subtitle">Pick the connection type first.</string>
+    <string name="settings_model_api_mode_official">Zhipu API</string>
+    <string name="settings_model_api_mode_official_description">Built-in official endpoint. Paste your API key to start.</string>
+    <string name="settings_model_api_mode_third_party">OpenAI-compatible</string>
+    <string name="settings_model_api_mode_third_party_description">Custom base URL and model name.</string>
+    <string name="settings_model_api_mode_local">Local model</string>
+    <string name="settings_model_api_mode_local_description">Runs on device. For offline or self-hosted inference.</string>
+    <string name="settings_model_api_remote_title">Remote API</string>
+    <string name="settings_model_api_remote_subtitle">Set the API key, and a compatible endpoint if needed.</string>
+    <string name="settings_model_api_key_placeholder">Paste an API key</string>
+    <string name="settings_model_api_get_key_short">Get key</string>
+    <string name="settings_model_api_third_party_switch_subtitle">Set a custom OpenAI-compatible endpoint and model.</string>
+    <string name="settings_model_api_local_title">Local model</string>
+    <string name="settings_model_api_local_subtitle">Download a model to run tasks on device.</string>
+    <string name="settings_model_api_local_switch_subtitle">Uses the local model first. Download files if not ready.</string>
+    <string name="settings_model_api_local_note_title">Local model notes</string>
+    <string name="settings_model_api_aquarius_title">Aquarius API</string>
+    <string name="settings_model_api_aquarius_subtitle">Sign in with an Aquarius account to use hosted models.</string>
+    <string name="settings_model_api_aquarius_switch">Use Aquarius API</string>
+    <string name="settings_model_api_aquarius_switch_subtitle">Switches to the hosted Aquarius service.</string>
+    <string name="settings_model_api_aquarius_mode">Aquarius hosted API</string>
+    <string name="settings_model_api_aquarius_mode_description">Sign in with Aquarius to get an API token automatically.</string>
+    <string name="settings_model_api_aquarius_membership">Upgrade</string>
+    <string name="settings_model_api_aquarius_membership_subtitle">Account and service status</string>
+    <string name="settings_model_api_aquarius_login">Sign in with Aquarius SSO</string>
+    <string name="settings_model_api_aquarius_logged_in">Signed in: %1$s</string>
+    <string name="settings_model_api_aquarius_logout">Sign out</string>
+    <string name="settings_model_api_aquarius_ready">Aquarius account ready</string>
+    <string name="settings_model_api_aquarius_login_required">Sign in to Aquarius</string>
+
+    <string name="aquarius_login_dialog_title">Sign in to Aquarius</string>
+    <string name="aquarius_login_username_label">Username</string>
+    <string name="aquarius_login_password_label">Password</string>
+    <string name="aquarius_login_confirm">Sign in</string>
+    <string name="aquarius_login_fields_required">Enter username and password</string>
+    <string name="aquarius_login_success">Signed in as %1$s</string>
+    <string name="aquarius_login_failed">Aquarius SSO sign-in failed. Try again.</string>
+    <string name="aquarius_sso_user_display">Aquarius SSO</string>
+    <string name="aquarius_logout_success">Signed out</string>
+    <string name="aquarius_api_section_unlocked">Hidden model section shown</string>
+    <string name="aquarius_api_section_locked">Hidden model section hidden</string>
+    <string name="aquarius_model_select_title">Choose model</string>
+    <string name="aquarius_model_change">Change model</string>
+    <string name="aquarius_current_model">Model: %1$s</string>
+
+    <string name="membership_title">Aquarius Membership</string>
+    <string name="membership_tier_basic">Basic</string>
+    <string name="membership_tier_basic_price">Free</string>
+    <string name="membership_tier_basic_desc">Core Aquarius features</string>
+    <string name="membership_tier_pro">Pro</string>
+    <string name="membership_tier_pro_price">¥29/mo</string>
+    <string name="membership_tier_pro_desc">All models and advanced automation</string>
+    <string name="membership_tier_ultimate">Ultimate</string>
+    <string name="membership_tier_ultimate_price">¥9999/mo</string>
+    <string name="membership_tier_ultimate_desc">Unlimited quota, priority support</string>
+    <string name="membership_feature_daily_tasks">Credits</string>
+    <string name="membership_feature_basic_value">10/day</string>
+    <string name="membership_feature_pro_value">200/day</string>
+    <string name="membership_feature_ultimate_value">Unlimited</string>
+    <string name="membership_feature_models">Models</string>
+    <string name="membership_feature_basic_models">Basic</string>
+    <string name="membership_feature_pro_models">All</string>
+    <string name="membership_feature_ultimate_models">All + flagship</string>
+    <string name="membership_feature_automation">Automation</string>
+    <string name="membership_feature_basic_automation">Basic</string>
+    <string name="membership_feature_pro_automation">Advanced</string>
+    <string name="membership_feature_ultimate_automation">Advanced + batch</string>
+    <string name="membership_feature_support">Support</string>
+    <string name="membership_feature_basic_support">Community</string>
+    <string name="membership_feature_pro_support">Email</string>
+    <string name="membership_feature_ultimate_support">Dedicated</string>
+    <string name="membership_current_plan">Current plan</string>
+    <string name="membership_subscribe">Subscribe</string>
+
+    <string name="settings_model_api_action_title">Connection test</string>
+    <string name="settings_model_api_action_subtitle">Verify the current model and endpoint.</string>
+    <string name="settings_model_api_status_title">Status</string>
+    <string name="drawer_api_base_url_label">API Base URL</string>
+    <string name="drawer_api_base_url_hint">e.g. https://api.openai.com/v1</string>
+    <string name="drawer_api_model_label">Model</string>
+    <string name="drawer_api_model_hint">e.g. gpt-4.1-mini</string>
+
+    <string name="settings_section_actions">More</string>
+    <string name="settings_open_automation">Open automation panel</string>
+    <string name="settings_open_about">Open about page</string>
+    <string name="settings_clipboard_empty">Clipboard is empty</string>
+    <string name="settings_api_key_pasted">API key pasted</string>
+    <string name="settings_api_key_required">Enter an API key</string>
+    <string name="settings_api_key_missing_entry">Set an API key in Settings first</string>
+    <string name="settings_api_available">API reachable</string>
+    <string name="settings_api_failed">API unreachable</string>
+    <string name="settings_api_unsafe">This API address is not allowed</string>
+    <string name="settings_api_checking">Testing API…</string>
+    <string name="settings_api_invalid_url">Enter a valid API address</string>
+    <string name="settings_api_invalid_scheme">Address must use HTTP or HTTPS</string>
+    <string name="settings_api_http_warning">This address uses unencrypted HTTP. Make sure you trust the server.</string>
+    <string name="settings_api_failed_http_message">API test failed (HTTP %1$d): %2$s</string>
+    <string name="settings_api_failed_http">API test failed (HTTP %1$d)</string>
+    <string name="settings_api_failed_message">API test failed: %1$s</string>
+    <string name="settings_api_failed_generic">API test failed. Try again.</string>
+    <string name="settings_api_save_encryption_unavailable">Secure storage unavailable. API key not saved.</string>
+
+    <string name="drawer_search_hint">Search chats</string>
+    <string name="drawer_section_recent">Recent</string>
+    <string name="drawer_settings">Settings</string>
+    <string name="drawer_empty">No chats yet</string>
+    <string name="drawer_empty_search">No matching chats</string>
+    <string name="drawer_more_actions">More</string>
+    <string name="drawer_delete_conversation">Delete chat</string>
+    <string name="drawer_open_navigation">Open navigation</string>
+    <string name="top_bar_new_chat">New chat</string>
+    <string name="top_bar_history">History</string>
+    <string name="top_bar_floating_window">Floating window</string>
+    <string name="message_thinking_duration_format">Thought for %1$.1fs</string>
+    <string name="message_thinking_in_progress">Thinking</string>
+
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_appearance_theme_mode">Theme</string>
+    <string name="settings_appearance_theme_system">System</string>
+    <string name="settings_appearance_theme_light">Light</string>
+    <string name="settings_appearance_theme_dark">Dark</string>
+    <string name="settings_appearance_theme_palette">Color</string>
+    <string name="settings_appearance_theme_palette_summary">Pick either an Aquarius preset or system dynamic color.</string>
+    <string name="settings_appearance_theme_palette_default">Neon</string>
+    <string name="settings_appearance_theme_palette_ocean">Clear sky</string>
+    <string name="settings_appearance_theme_palette_forest">Dawn</string>
+    <string name="settings_appearance_theme_palette_sunset">Mist</string>
+    <string name="settings_appearance_theme_palette_dynamic">Wallpaper colors</string>
+    <string name="settings_appearance_theme_palette_dynamic_description">Builds a Material You palette from your wallpaper. Aquarius presets are disabled.</string>
+    <string name="settings_appearance_amoled">AMOLED black</string>
+    <string name="settings_appearance_dynamic_color">Dynamic color</string>
+    <string name="settings_appearance_font_size">Chat text size</string>
+    <string name="settings_appearance_font_size_small">Small</string>
+    <string name="settings_appearance_font_size_default">Default</string>
+    <string name="settings_appearance_font_size_large">Large</string>
+    <string name="settings_appearance_font_size_xlarge">X-Large</string>
+    <string name="settings_appearance_font_family">Font</string>
+    <string name="settings_appearance_font_default">Default</string>
+    <string name="settings_appearance_font_sans_serif">Sans serif</string>
+    <string name="settings_appearance_font_serif">Serif</string>
+    <string name="settings_appearance_font_monospace">Monospace</string>
+    <string name="settings_appearance_code_section">Code blocks</string>
+    <string name="settings_appearance_code_auto_wrap">Wrap lines</string>
+    <string name="settings_appearance_code_line_numbers">Line numbers</string>
+    <string name="settings_appearance_code_auto_collapse">Auto collapse</string>
+
+    <string name="membership_account_title">Aquarius account</string>
+    <string name="membership_account_unavailable">Not signed in</string>
+    <string name="membership_model_title">Model used for the next request</string>
+    <string name="membership_status_title">Plan and quota</string>
+    <string name="membership_status_unavailable">This service does not expose plans or quota, so in-app subscription is unavailable. Model availability depends on the server response.</string>
+    <string name="drawer_new_chat">New chat</string>
+
+    <string-array name="transcript_suggestion_examples">
+        <item>Book a train ticket to Shanghai tomorrow</item>
+        <item>Order an iced americano for delivery</item>
+        <item>Find the top-rated hotpot nearby and book for 4 tomorrow night</item>
+    </string-array>
+
+    <string-array name="automation_recommend_tasks">
+        <item>Open Dianping and book a nearby hotpot place for 2 at 1pm tomorrow</item>
+        <item>Open 12306 and book the cheapest train from Nanjing to Beijing tomorrow</item>
+        <item>Open Umetrip and book a flight from Nanjing to Chengdu tomorrow</item>
+    </string-array>
+</resources>

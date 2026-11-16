@@ -1,0 +1,1528 @@
+package com.ai.phoneagent.viewmodel
+
+import com.ai.phoneagent.core.automation.TaskSnapshot
+import com.ai.phoneagent.core.automation.TaskStatus
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import android.Manifest
+import android.app.Activity
+import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
+import android.util.Log
+import android.widget.Toast
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.ai.phoneagent.AutomationLiveNotification
+import com.ai.phoneagent.AutomationOverlay
+import com.ai.phoneagent.MainActivity
+import com.ai.phoneagent.PhoneAgentAccessibilityService
+import com.ai.phoneagent.R
+import com.ai.phoneagent.ShizukuBridge
+import com.ai.phoneagent.UiAutomationAgent
+import com.ai.phoneagent.VirtualDisplayConfig
+import com.ai.phoneagent.VirtualDisplayController
+import com.ai.phoneagent.VirtualScreenPreviewOverlay
+import com.ai.phoneagent.core.automation.AutomationInstructionRequest
+import com.ai.phoneagent.core.automation.AutomationLogBridge
+import com.ai.phoneagent.core.cache.ScreenshotOverlayGuard
+import com.ai.phoneagent.core.config.AgentConfiguration
+import com.ai.phoneagent.core.overlay.OverlayTaskBridge
+import com.ai.phoneagent.core.tools.AppPackageManager
+import com.ai.phoneagent.core.tools.ToolRegistration
+import com.ai.phoneagent.data.local.AutomationTaskEntity
+import com.ai.phoneagent.data.local.AutomationTaskRepository
+import com.ai.phoneagent.data.preferences.AppPreferencesRepository
+import com.ai.phoneagent.data.preferences.AutomationResultsRepository
+import com.ai.phoneagent.net.AquariusApiClient
+import com.ai.phoneagent.net.AutoGlmClient
+import com.ai.phoneagent.net.LocalMnnInferenceEngine
+import com.ai.phoneagent.net.ModelScopeModelDownloader
+import com.ai.phoneagent.core.templates.PromptTemplates
+import com.ai.phoneagent.speech.SherpaSpeechRecognizer
+import com.ai.phoneagent.speech.SherpaSpeechRegistry
+import java.lang.ref.WeakReference
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.coroutines.resume
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import rikka.shizuku.Shizuku
+
+class AutomationViewModel(
+    application: Application,
+    private val appPrefsRepository: AppPreferencesRepository,
+    private val automationResultsRepository: AutomationResultsRepository,
+    private val automationTaskRepository: AutomationTaskRepository,
+    private val toolRegistration: ToolRegistration,
+    private val liveNotification: AutomationLiveNotification,
+    private val automationOverlay: AutomationOverlay,
+    private val appPackageManager: AppPackageManager,
+    private val screenshotOverlayGuard: ScreenshotOverlayGuard,
+    private val promptTemplates: PromptTemplates,
+    private val localMnnInferenceEngine: LocalMnnInferenceEngine,
+    private val modelScopeModelDownloader: ModelScopeModelDownloader,
+    private val virtualScreenPreviewOverlay: VirtualScreenPreviewOverlay,
+) : AndroidViewModel(application) {
+
+    companion object {
+        const val EXTRA_FORCE_TOP_ON_ENTRY = "force_top_on_entry"
+        const val EXTRA_AUTOMATION_TASK = "automation_task"
+        const val EXTRA_AUTOMATION_SOURCE = "automation_source"
+        const val EXTRA_AUTOMATION_AUTO_START = "automation_auto_start"
+        const val EXTRA_KEEP_MAIN_ON_TOP = "keep_main_on_top"
+        const val EXTRA_AUTOMATION_DISPATCH_TOKEN = "automation_dispatch_token"
+        private const val SHIZUKU_PERMISSION_REQUEST_CODE = 2026
+
+        /**
+         * MainActivity 收到自动化 Intent 时暂存的待处理启动参数。
+         * AutomationScreen 组合时消费。
+         */
+        @Volatile
+        var pendingLaunchArgs: LaunchArgs? = null
+
+        fun extractLaunchArgsFromIntent(intent: Intent?): LaunchArgs? {
+            intent ?: return null
+            val task = intent.getStringExtra(EXTRA_AUTOMATION_TASK)
+            val forceTop = intent.getBooleanExtra(EXTRA_FORCE_TOP_ON_ENTRY, false)
+            if (task.isNullOrBlank() && !forceTop) return null
+            return LaunchArgs(
+                forceTopOnEntry = forceTop,
+                automationTask = task,
+                automationSource = intent.getStringExtra(EXTRA_AUTOMATION_SOURCE),
+                automationAutoStart = intent.getBooleanExtra(EXTRA_AUTOMATION_AUTO_START, false),
+                keepMainOnTop = intent.getBooleanExtra(EXTRA_KEEP_MAIN_ON_TOP, false),
+            )
+        }
+    }
+
+    data class RuntimeConnectionState(
+        val accessibilityEnabled: Boolean,
+        val accessibilityConnected: Boolean,
+        val shizukuBinderConnected: Boolean,
+        val shizukuPermissionGranted: Boolean,
+    ) {
+        val shizukuReady: Boolean
+            get() = shizukuBinderConnected && shizukuPermissionGranted
+    }
+
+    data class LaunchArgs(
+        val forceTopOnEntry: Boolean = false,
+        val automationTask: String? = null,
+        val automationSource: String? = null,
+        val automationAutoStart: Boolean = false,
+        val keepMainOnTop: Boolean = false,
+        val popBackImmediately: Boolean = false,
+        val runId: String? = null,
+    )
+
+    private val appContext: Context = application.applicationContext
+    private var hostActivityRef: WeakReference<Activity>? = null
+
+    private val mutableTask = MutableStateFlow<TaskSnapshot?>(null)
+    val taskSnapshot = mutableTask.asStateFlow()
+    val latestResult = automationResultsRepository.resultFlow
+    private var agentJob: Job? = null
+    @Volatile private var paused: Boolean = false
+    private var requestedRunId: String? = null
+
+    var isBackgroundMode by mutableStateOf(false)
+        private set
+
+    // R-07：识别器实例由 SherpaSpeechRegistry 进程级共享，这里仅缓存 attach 返回值；
+    // sherpaRegistryAcquired 表示本 ViewModel 持有一票引用。
+    private var sherpaSpeechRecognizer: SherpaSpeechRecognizer? = null
+    private var sherpaRegistryAcquired = false
+    private var isListeningInternal: Boolean = false
+    private var voiceInputAnimJob: Job? = null
+    private var savedTaskText: String = ""
+    private var voicePrefix: String = ""
+    private var pendingStartVoice: Boolean = false
+    private var sherpaInitializing: Boolean = false
+
+    private var virtualDisplayStatusJob: Job? = null
+    private var accessibilityStatusSyncJob: Job? = null
+
+    private var mirrorLogsToMain: Boolean = false
+    private var overlayClickReturnToMain: Boolean = false
+    private var lastDispatchedTask: String? = null
+
+    private var composeCanStart: Boolean = false
+    private var composeHasPartialConnection: Boolean = false
+
+    var statusText by mutableStateOf("")
+        private set
+    var statusSummary by mutableStateOf("")
+        private set
+    var interactionModeText by mutableStateOf("")
+        private set
+    var accessibilityStatusText by mutableStateOf("")
+        private set
+    var shizukuStatusText by mutableStateOf("")
+        private set
+    var taskText by mutableStateOf("")
+        private set
+    var taskHint by mutableStateOf("")
+        private set
+    var recommendText by mutableStateOf("")
+        private set
+    var logText by mutableStateOf("")
+        private set
+    var modeDescription by mutableStateOf("")
+        private set
+    var virtualDisplayStatus by mutableStateOf("")
+        private set
+    var useShizukuInteraction by mutableStateOf(false)
+        private set
+    var autoApprove by mutableStateOf(false)
+        private set
+    var showShizukuControls by mutableStateOf(false)
+        private set
+    var showShizukuAuthorize by mutableStateOf(false)
+        private set
+    var startButtonText by mutableStateOf("")
+        private set
+    var startButtonEnabled by mutableStateOf(false)
+        private set
+    var startButtonTerminateStyle by mutableStateOf(false)
+        private set
+    var pauseButtonText by mutableStateOf("")
+        private set
+    var pauseButtonEnabled by mutableStateOf(false)
+        private set
+    var stopButtonEnabled by mutableStateOf(false)
+        private set
+    var isListening by mutableStateOf(false)
+        private set
+
+    private val stopFromOverlayReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == VirtualScreenPreviewOverlay.ACTION_STOP_AUTOMATION) {
+                    appendLog("[虚拟屏] 收到关闭请求，正在停止任务并清理虚拟屏…")
+                    handleStopFromOverlay()
+                }
+            }
+        }
+
+    private val pauseToggleReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == VirtualScreenPreviewOverlay.ACTION_PAUSE_TOGGLE) {
+                    togglePause()
+                }
+            }
+        }
+
+    private var recommendJob: Job? = null
+    private val recommendTasks by lazy {
+        appContext.resources.getStringArray(R.array.automation_recommend_tasks).toList()
+    }
+    private var currentRecommendIndex = 0
+
+    private val serviceId by lazy {
+        "${appContext.packageName}/${PhoneAgentAccessibilityService::class.java.name}"
+    }
+
+    init {
+        val savedUseVd = VirtualDisplayConfig.getUseVirtualDisplay(appContext)
+        setExecutionMode(savedUseVd)
+        setUseShizukuInteraction(
+            checked = VirtualDisplayConfig.getUseShizukuInteraction(appContext),
+            userInitiated = false,
+        )
+        applyAutoApprove(checked = VirtualDisplayConfig.getAutoApproveAutomation(appContext))
+        updateComposeControlState(canStart = false)
+
+        viewModelScope.launch(Dispatchers.Default) {
+            initializeToolSystem()
+        }
+        startRecommendTaskRotation()
+        checkAccessibilityStatus()
+        registerOverlayReceivers()
+        // 悬浮窗（独立 WindowManager 视图）通过桥回到任务调度：结束任务、下发新任务。
+        OverlayTaskBridge.onStopTask = { handleStopFromOverlay() }
+        OverlayTaskBridge.onSubmitTask = { goal -> submitTaskFromOverlay(goal) }
+        OverlayTaskBridge.onAppearanceChanged = { automationOverlay.refreshAppearance() }
+    }
+
+    fun attachHostActivity(activity: Activity?) {
+        hostActivityRef = activity?.let { WeakReference(it) }
+    }
+
+    fun onResume() {
+        scheduleAccessibilityStatusSync()
+        restoreLastRunResult()
+    }
+
+    fun onStop() {
+        accessibilityStatusSyncJob?.cancel()
+        accessibilityStatusSyncJob = null
+        stopLocalVoiceInput(triggerRecognizerStop = true)
+    }
+
+    fun onTaskChange(value: String) {
+        taskText = value
+    }
+
+    fun onUseRecommendTask() {
+        taskText = recommendText
+    }
+
+    fun onExecutionModeChange(backgroundMode: Boolean) {
+        // 开关偏好切换不再被后台就绪检查阻断：点开即开、点关即关；
+        // 运行时就绪校验留给真正启动执行时（startAgent/resolver）处理。
+        setExecutionMode(backgroundMode)
+        checkAccessibilityStatus()
+    }
+
+    fun onShizukuModeChange(checked: Boolean) {
+        setUseShizukuInteraction(checked)
+    }
+
+    fun onAutoApproveChange(checked: Boolean) {
+        applyAutoApprove(checked)
+    }
+
+    fun onRefreshStatus() {
+        checkAccessibilityStatus()
+    }
+
+    fun onAudioPermissionResult(granted: Boolean) {
+        if (granted) {
+            if (pendingStartVoice) {
+                pendingStartVoice = false
+                startLocalVoiceInput()
+            }
+        } else {
+            pendingStartVoice = false
+            Toast.makeText(appContext, "需要麦克风权限才能语音输入", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun onVoiceTaskClick(hasAudioPermission: Boolean): Boolean {
+        if (isListeningInternal) {
+            stopLocalVoiceInput()
+            return false
+        }
+        if (hasAudioPermission) {
+            pendingStartVoice = false
+            startLocalVoiceInput()
+            return false
+        }
+        pendingStartVoice = true
+        return true
+    }
+
+    fun onStartOrTerminateClick() {
+        if (agentJob != null) {
+            stopAgent()
+        } else {
+            startAgent()
+        }
+    }
+
+    fun onPauseClick() {
+        togglePause()
+    }
+
+    fun onStopClick() {
+        stopAgent()
+    }
+
+    fun copyLog() {
+        val text = logText.trim()
+        if (text.isBlank()) {
+            Toast.makeText(appContext, "暂无可复制的日志", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Automation Log", text))
+        Toast.makeText(appContext, "日志已复制", Toast.LENGTH_SHORT).show()
+    }
+
+    fun consumeLaunchArgs(args: LaunchArgs) {
+        val task = args.automationTask?.trim().orEmpty()
+        if (task.isBlank()) return
+
+        val source = args.automationSource?.trim().orEmpty()
+        val autoStart = args.automationAutoStart
+        val keepMainOnTop = args.keepMainOnTop
+
+        mirrorLogsToMain =
+            source == AutomationInstructionRequest.Source.MANUAL_AGENT_MODE.wireValue ||
+                source == AutomationInstructionRequest.Source.ADVANCED_AI.wireValue
+        overlayClickReturnToMain = mirrorLogsToMain
+        lastDispatchedTask = task
+
+        requestedRunId = args.runId
+        taskText = task
+
+        if (source.isNotBlank()) {
+            appendLog("接收任务来源：$source")
+        }
+        appendLog("接收任务：$task")
+
+        if (!autoStart) return
+
+        if (agentJob != null) {
+            appendLog("当前自动化任务仍在执行，暂不自动启动新任务")
+            Toast.makeText(appContext, "当前有任务在执行，请先停止再重试", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (keepMainOnTop) {
+            bringMainActivityToFront()
+        }
+        startAgent()
+    }
+
+    fun hasRecordAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    fun checkAccessibilityStatus() {
+        try {
+            val state = collectRuntimeConnectionState()
+            val shouldShowShizuku = state.shizukuBinderConnected
+            val effectiveUseShizuku = useShizukuInteraction && shouldShowShizuku
+            val canStart = resolveRuntimeInteractionPreference(effectiveUseShizuku, state) != null
+            composeCanStart = canStart
+            composeHasPartialConnection = state.accessibilityConnected || state.shizukuReady
+
+            taskHint =
+                if (canStart) {
+                    "在此输入或录入您的任务指令..."
+                } else {
+                    "请先满足当前模式的连接条件后再开始"
+                }
+            showShizukuControls = shouldShowShizuku
+            showShizukuAuthorize = shouldShowShizuku
+            updateComposeControlState(canStart)
+            updateComposeStatusSnapshot(effectiveUseShizuku, state, canStart)
+        } catch (e: Exception) {
+            Log.e("AutomationViewModel", "检查无障碍服务状态失败: ${e.message}", e)
+        }
+    }
+
+    fun statusTone(): com.ai.phoneagent.ui.automation.AutomationStatusTone {
+        return when {
+            composeCanStart -> com.ai.phoneagent.ui.automation.AutomationStatusTone.Ready
+            composeHasPartialConnection -> com.ai.phoneagent.ui.automation.AutomationStatusTone.Partial
+            else -> com.ai.phoneagent.ui.automation.AutomationStatusTone.Inactive
+        }
+    }
+
+    fun authorizeShizukuAndAccessibility() {
+        val state = collectRuntimeConnectionState()
+        if (!state.shizukuBinderConnected) {
+            Toast.makeText(appContext, R.string.automation_shizuku_not_connected, Toast.LENGTH_SHORT).show()
+            checkAccessibilityStatus()
+            return
+        }
+        if (!state.shizukuPermissionGranted) {
+            ensureShizukuPermissionGranted()
+            Toast.makeText(appContext, R.string.automation_shizuku_permission_requested, Toast.LENGTH_SHORT)
+                .show()
+            checkAccessibilityStatus()
+            return
+        }
+        val granted = grantAccessibilityViaShizuku()
+        if (granted) {
+            Toast.makeText(appContext, R.string.automation_shizuku_authorize_success, Toast.LENGTH_SHORT).show()
+            checkAccessibilityStatus()
+            refreshStatusAfterOneTapAuthorize()
+            return
+        }
+        Toast.makeText(appContext, R.string.automation_shizuku_authorize_failed, Toast.LENGTH_SHORT).show()
+        checkAccessibilityStatus()
+    }
+
+    private fun registerOverlayReceivers() {
+        runCatching {
+            ContextCompat.registerReceiver(
+                appContext,
+                stopFromOverlayReceiver,
+                IntentFilter(VirtualScreenPreviewOverlay.ACTION_STOP_AUTOMATION),
+                ContextCompat.RECEIVER_EXPORTED,
+            )
+            ContextCompat.registerReceiver(
+                appContext,
+                pauseToggleReceiver,
+                IntentFilter(VirtualScreenPreviewOverlay.ACTION_PAUSE_TOGGLE),
+                ContextCompat.RECEIVER_EXPORTED,
+            )
+        }.onFailure {
+            Log.e("AutomationViewModel", "BroadcastReceiver 注册失败: ${it.message}", it)
+        }
+    }
+
+    private fun updateComposeControlState(canStart: Boolean) {
+        val running = agentJob != null
+        startButtonText =
+            if (running) {
+                appContext.getString(R.string.automation_terminate)
+            } else {
+                appContext.getString(R.string.automation_start_now)
+            }
+        startButtonEnabled = if (running) true else canStart
+        startButtonTerminateStyle = running
+        pauseButtonText =
+            if (paused) {
+                appContext.getString(R.string.automation_resume)
+            } else {
+                appContext.getString(R.string.automation_pause)
+            }
+        pauseButtonEnabled = running
+        stopButtonEnabled = running
+    }
+
+    private fun ensureBackgroundModeReady(): Boolean {
+        val state = collectRuntimeConnectionState()
+        if (!state.shizukuBinderConnected) {
+            Toast.makeText(appContext, R.string.automation_background_requires_shizuku, Toast.LENGTH_SHORT).show()
+            return false
+        }
+        if (!state.shizukuPermissionGranted) {
+            ensureShizukuPermissionGranted()
+            Toast.makeText(appContext, R.string.automation_background_requires_shizuku_permission, Toast.LENGTH_SHORT)
+                .show()
+            return false
+        }
+        return true
+    }
+
+    private fun setExecutionMode(backgroundMode: Boolean) {
+        isBackgroundMode = backgroundMode
+        VirtualDisplayController.setShouldUseVirtualDisplay(backgroundMode)
+        VirtualDisplayConfig.setUseVirtualDisplay(appContext, backgroundMode)
+        modeDescription =
+            if (backgroundMode) {
+                appContext.getString(R.string.automation_mode_description_background)
+            } else {
+                appContext.getString(R.string.automation_mode_description_front)
+            }
+        updateVirtualDisplayStatus()
+    }
+
+    private fun applyAutoApprove(checked: Boolean) {
+        autoApprove = checked
+        VirtualDisplayConfig.setAutoApproveAutomation(appContext, checked)
+    }
+
+    private fun setUseShizukuInteraction(
+        checked: Boolean,
+        userInitiated: Boolean = true,
+    ) {
+        // 偏好状态先落（不再被运行时连接状态阻断：开关必须点开即开、点关即关）。
+        useShizukuInteraction = checked
+        VirtualDisplayConfig.setUseShizukuInteraction(appContext, checked)
+
+        if (checked && userInitiated) {
+            // 连接/授权检查降级为非阻断提示与自动增强，不回退开关状态。
+            val state = collectRuntimeConnectionState()
+            if (!state.shizukuBinderConnected) {
+                Toast.makeText(appContext, "未检测到 Shizuku 服务连接，请先启动 Shizuku", Toast.LENGTH_SHORT).show()
+            } else if (!state.shizukuPermissionGranted && !ensureShizukuPermissionGranted()) {
+                Toast.makeText(appContext, "未检测到 Shizuku 授权，已发起授权请求，请先在弹窗中授予", Toast.LENGTH_SHORT).show()
+            } else {
+                val latestState = collectRuntimeConnectionState()
+                if (!latestState.accessibilityEnabled && latestState.shizukuReady) {
+                    val granted = grantAccessibilityViaShizuku()
+                    if (granted) {
+                        Toast.makeText(appContext, "已通过 Shizuku 自动开启无障碍", Toast.LENGTH_SHORT).show()
+                        refreshStatusAfterOneTapAuthorize()
+                    } else {
+                        Toast.makeText(appContext, "Shizuku 自动开启无障碍失败，请手动开启", Toast.LENGTH_SHORT).show()
+                    }
+                } else if (latestState.accessibilityEnabled && !latestState.accessibilityConnected) {
+                    Toast.makeText(appContext, "无障碍已开启，正在等待服务连接…", Toast.LENGTH_SHORT).show()
+                    refreshStatusAfterOneTapAuthorize()
+                }
+            }
+        }
+        checkAccessibilityStatus()
+    }
+
+    private fun updateComposeStatusSnapshot(
+        useShizukuInteraction: Boolean,
+        state: RuntimeConnectionState,
+        canStart: Boolean,
+    ) {
+        val accLine =
+            when {
+                state.accessibilityConnected -> appContext.getString(R.string.automation_status_accessibility_connected)
+                state.accessibilityEnabled -> appContext.getString(R.string.automation_status_accessibility_enabled_waiting)
+                else -> appContext.getString(R.string.automation_status_accessibility_disabled)
+            }
+        val shizukuLine =
+            when {
+                state.shizukuReady -> appContext.getString(R.string.automation_status_shizuku_ready)
+                state.shizukuBinderConnected -> appContext.getString(R.string.automation_status_shizuku_waiting_permission)
+                else -> appContext.getString(R.string.automation_status_shizuku_disconnected)
+            }
+        val summary =
+            when {
+                canStart -> appContext.getString(R.string.automation_status_summary_ready)
+                isBackgroundMode && !state.shizukuBinderConnected ->
+                    appContext.getString(R.string.automation_status_summary_need_background_shizuku)
+                isBackgroundMode && !state.shizukuPermissionGranted ->
+                    appContext.getString(R.string.automation_status_summary_need_shizuku_permission)
+                useShizukuInteraction && !state.shizukuBinderConnected ->
+                    appContext.getString(R.string.automation_status_summary_need_shizuku_connection)
+                useShizukuInteraction && !state.shizukuPermissionGranted ->
+                    appContext.getString(R.string.automation_status_summary_need_shizuku_permission)
+                useShizukuInteraction && !state.accessibilityEnabled ->
+                    appContext.getString(R.string.automation_status_summary_need_accessibility_enabled)
+                useShizukuInteraction && !state.accessibilityConnected ->
+                    appContext.getString(R.string.automation_status_summary_need_accessibility_connection)
+                state.shizukuReady -> appContext.getString(R.string.automation_status_summary_shizuku_detected)
+                else -> appContext.getString(R.string.automation_status_summary_need_accessibility_generic)
+            }
+        val modeLine =
+            if (useShizukuInteraction) {
+                appContext.getString(R.string.automation_status_mode_shizuku)
+            } else {
+                appContext.getString(R.string.automation_status_mode_accessibility)
+            }
+        statusSummary = summary
+        interactionModeText = modeLine
+        accessibilityStatusText = accLine
+        shizukuStatusText = shizukuLine
+        statusText = listOf(summary, modeLine, "$accLine | $shizukuLine").joinToString("\n")
+    }
+
+    private fun scheduleAccessibilityStatusSync(
+        totalDurationMs: Long = 12000L,
+        pollMs: Long = 300L,
+    ) {
+        accessibilityStatusSyncJob?.cancel()
+        accessibilityStatusSyncJob =
+            viewModelScope.launch {
+                val deadline = System.currentTimeMillis() + totalDurationMs
+                while (System.currentTimeMillis() <= deadline) {
+                    checkAccessibilityStatus()
+                    delay(pollMs)
+                }
+            }
+    }
+
+    private fun saveRunResult(success: Boolean, message: String, steps: Int, logText: String, cancelled: Boolean = false) {
+        val status = if (cancelled) TaskStatus.CANCELLED else if (success) TaskStatus.SUCCEEDED else TaskStatus.FAILED
+        mutableTask.update { it?.copy(status = status, message = message, steps = steps, log = logText) }
+        val snapshot = mutableTask.value
+        // 终态立即落库并广播，历史会话里的面板同步更新为完成/失败/已停止。
+        persistTaskRecordNow(status = status.name, message = message)
+        snapshot?.runId?.let { runId ->
+            AutomationLogBridge.publishTaskState(appContext, runId, status.name, message)
+        }
+        viewModelScope.launch {
+            runCatching {
+                automationResultsRepository.saveResult(
+                    success = success,
+                    message = message,
+                    steps = steps,
+                    time = System.currentTimeMillis(),
+                    log = logText,
+                    runId = snapshot?.runId.orEmpty(),
+                    goal = snapshot?.goal.orEmpty(),
+                    startedAt = snapshot?.startedAt ?: 0L,
+                    status = status.name,
+                )
+            }.onFailure { e ->
+                Log.e("AutomationViewModel", "保存运行结果失败: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun restoreLastRunResult() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val result = automationResultsRepository.getLastResultBlocking()
+                if (result.time <= 0 || System.currentTimeMillis() - result.time >= 24 * 60 * 60 * 1000) {
+                    return@runCatching
+                }
+
+                val timeStr =
+                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(result.time))
+                val statusText = if (result.success) "✅ 成功" else "❌ 失败"
+
+                appendLog("\n=== 上一次运行结果 ($timeStr) ===")
+                appendLog("状态: $statusText")
+                appendLog("步数: ${result.steps}")
+                appendLog("结果: ${result.message}")
+                if (result.log.isNotBlank()) {
+                    appendLog("\n--- 上次日志 ---")
+                    appendLog(result.log.take(2000))
+                }
+                appendLog("=== 结果已恢复 ===\n")
+            }.onFailure {
+                Log.e("AutomationViewModel", "恢复运行结果失败: ${it.message}", it)
+            }
+        }
+    }
+
+    private fun initializeToolSystem() {
+        try {
+            toolRegistration.registerAllTools()
+            appendLog("✅ 工具系统初始化完成")
+        } catch (e: Exception) {
+            Log.e("AutomationViewModel", "工具系统初始化失败: ${e.message}", e)
+            appendLog("⚠️ 工具系统初始化失败: ${e.message}")
+        }
+    }
+
+    private fun grantAccessibilityViaShizuku(): Boolean {
+        if (isAccessibilityServiceEnabled()) return true
+        if (!ShizukuBridge.isShizukuAvailable()) return false
+
+        val existing =
+            Settings.Secure.getString(
+                appContext.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+            ) ?: ""
+        val services = existing.split(':').map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
+        if (!services.any { it.equals(serviceId, ignoreCase = true) }) {
+            services.add(serviceId)
+        }
+
+        val enableList = services.joinToString(":")
+        val setServicesResult =
+            runCatching {
+                ShizukuBridge.execResultArgs(
+                    listOf("settings", "put", "secure", "enabled_accessibility_services", enableList),
+                )
+            }.getOrNull()
+        val enableServiceResult =
+            runCatching {
+                ShizukuBridge.execResultArgs(
+                    listOf("settings", "put", "secure", "accessibility_enabled", "1"),
+                )
+            }.getOrNull()
+
+        if (setServicesResult == null || setServicesResult.exitCode != 0) return false
+        if (enableServiceResult == null || enableServiceResult.exitCode != 0) return false
+        return isAccessibilityServiceEnabled()
+    }
+
+    private fun refreshStatusAfterOneTapAuthorize() {
+        viewModelScope.launch {
+            repeat(12) {
+                val state = collectRuntimeConnectionState()
+                checkAccessibilityStatus()
+                val canStart = resolveRuntimeInteractionPreference(useShizukuInteraction, state) != null
+                if (canStart) return@launch
+                delay(250L)
+            }
+        }
+    }
+
+    fun resolveRuntimeInteractionPreference(
+        preferShizuku: Boolean,
+        state: RuntimeConnectionState,
+    ): Boolean? {
+        return when {
+            isBackgroundMode && !state.shizukuReady -> null
+            preferShizuku && state.shizukuReady && state.accessibilityConnected -> true
+            !preferShizuku && state.accessibilityConnected -> false
+            else -> null
+        }
+    }
+
+    fun collectRuntimeConnectionState(): RuntimeConnectionState {
+        val accessibilityEnabled = isAccessibilityServiceEnabled()
+        val accessibilityConnected = PhoneAgentAccessibilityService.instance != null
+        val shizukuBinderConnected = ShizukuBridge.pingBinder()
+        val shizukuPermissionGranted = if (shizukuBinderConnected) ShizukuBridge.hasPermission() else false
+        return RuntimeConnectionState(
+            accessibilityEnabled = accessibilityEnabled,
+            accessibilityConnected = accessibilityConnected,
+            shizukuBinderConnected = shizukuBinderConnected,
+            shizukuPermissionGranted = shizukuPermissionGranted,
+        )
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        return try {
+            val enabledServices =
+                Settings.Secure.getString(
+                    appContext.contentResolver,
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                )
+            !enabledServices.isNullOrEmpty() && enabledServices.contains(serviceId)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun startAgent() {
+        if (agentJob != null) return
+
+        val task = taskText.trim()
+        if (task.isBlank()) {
+            Toast.makeText(appContext, "请输入任务", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isBackgroundMode && !ensureBackgroundModeReady()) {
+            checkAccessibilityStatus()
+            return
+        }
+        val fromHomeDispatch = overlayClickReturnToMain && lastDispatchedTask == task
+
+        val localModelEnabled = isLocalModelEnabled()
+        val apiKey = getApiKey()
+        if (!localModelEnabled && apiKey.isBlank()) {
+            Toast.makeText(appContext, "请先在侧边栏配置 API Key", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (localModelEnabled && !modelScopeModelDownloader.isQwen35ModelReady(appContext)) {
+            Toast.makeText(appContext, "本地模型未就绪，请先在主界面下载模型", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val baseUrl = resolveApiBaseUrl()
+        val model = resolveAutomationModel()
+        val useThirdPartyApi = appPrefsRepository.getApiUseThirdPartyBlocking()
+
+        var allowAccessibilityPendingConnection = false
+        if (useShizukuInteraction) {
+            val beforeState = collectRuntimeConnectionState()
+            if (beforeState.shizukuBinderConnected && beforeState.shizukuPermissionGranted && !beforeState.accessibilityEnabled) {
+                val granted = grantAccessibilityViaShizuku()
+                if (granted) {
+                    appendLog("Shizuku 模式：已自动开启无障碍")
+                    refreshStatusAfterOneTapAuthorize()
+                } else {
+                    Toast.makeText(appContext, "Shizuku 模式下自动开启无障碍失败，请手动开启", Toast.LENGTH_SHORT).show()
+                    checkAccessibilityStatus()
+                    return
+                }
+            }
+        } else if (fromHomeDispatch) {
+            val beforeState = collectRuntimeConnectionState()
+            if (beforeState.shizukuReady && !beforeState.accessibilityEnabled) {
+                val granted = grantAccessibilityViaShizuku()
+                if (granted) {
+                    allowAccessibilityPendingConnection = true
+                    appendLog("主页启动：检测到 Shizuku 已就绪，已自动开启无障碍")
+                    refreshStatusAfterOneTapAuthorize()
+                } else {
+                    appendLog("主页启动：Shizuku 自动开启无障碍失败，将按当前连接状态继续校验")
+                }
+            }
+        }
+
+        val state = collectRuntimeConnectionState()
+        val preferShizukuInteraction = useShizukuInteraction && state.shizukuBinderConnected
+        var effectiveUseShizuku = resolveRuntimeInteractionPreference(preferShizukuInteraction, state)
+        if (effectiveUseShizuku == null) {
+            effectiveUseShizuku =
+                when {
+                    preferShizukuInteraction && state.shizukuReady && state.accessibilityEnabled -> true
+                    !preferShizukuInteraction && state.accessibilityEnabled -> false
+                    allowAccessibilityPendingConnection && state.accessibilityEnabled -> false
+                    else -> null
+                }
+        }
+
+        if (effectiveUseShizuku == null) {
+            val msg =
+                if (isBackgroundMode && !state.shizukuBinderConnected) {
+                    appContext.getString(R.string.automation_background_requires_shizuku)
+                } else if (isBackgroundMode && !state.shizukuPermissionGranted) {
+                    ensureShizukuPermissionGranted()
+                    appContext.getString(R.string.automation_background_requires_shizuku_permission)
+                } else if (!state.shizukuBinderConnected && !state.accessibilityConnected) {
+                    "未检测到可用连接，请先连接 Shizuku 或无障碍服务"
+                } else if (!preferShizukuInteraction && !state.accessibilityConnected) {
+                    "Shizuku 模式已关闭且无障碍未开启，请先开启无障碍或切换到 Shizuku 模式"
+                } else if (preferShizukuInteraction && state.shizukuBinderConnected && !state.shizukuPermissionGranted) {
+                    ensureShizukuPermissionGranted()
+                    "Shizuku 未授权，已发起授权请求，请授权后重试"
+                } else {
+                    "当前无可用连接，请检查 Shizuku/无障碍状态"
+                }
+            Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
+            checkAccessibilityStatus()
+            return
+        }
+
+        if (preferShizukuInteraction && !effectiveUseShizuku) {
+            appendLog("Shizuku 未就绪，已自动回退到无障碍执行")
+        }
+
+        mutableTask.value = TaskSnapshot(requestedRunId ?: java.util.UUID.randomUUID().toString(), task, System.currentTimeMillis())
+        requestedRunId = null
+        logText = ""
+        // 任务一开始即写入历史并通知主界面建立会话，暂停/中断也不会丢记录。
+        // 无论从主页还是自动化页启动，都把日志镜像到主界面，历史对话才能看到完整过程。
+        mirrorLogsToMain = true
+        mutableTask.value?.let { snapshot ->
+            persistTaskRecordNow(status = TaskStatus.RUNNING.name, message = "执行中")
+            AutomationLogBridge.publishTaskStarted(
+                context = appContext,
+                runId = snapshot.runId,
+                goal = snapshot.goal,
+                startedAt = snapshot.startedAt,
+            )
+        }
+        val modeText = if (isBackgroundMode) "后台虚拟屏模式" else "前端执行模式"
+        appendLog("执行模式：$modeText")
+        appendLog("准备开始：baseUrl=$baseUrl, model=$model")
+        appendLog("任务：$task")
+
+        val liveNotificationStarted =
+            liveNotification.show(
+                title = "分析中",
+                subtitle = task.take(20),
+                maxSteps = 100,
+                navigateMainOnClick = fromHomeDispatch,
+            )
+
+        // 悬浮窗优先：实时展示模型返回内容；通知用于退到后台后的状态提示。
+        val overlayAllowed = automationOverlay.canDrawOverlays(appContext)
+        val overlayShown =
+            if (overlayAllowed) {
+                automationOverlay.show(
+                    context = appContext,
+                    title = "分析中",
+                    subtitle = task.take(20),
+                    maxSteps = 100,
+                    activity = hostActivityRef?.get(),
+                    navigateMainOnClick = fromHomeDispatch,
+                    onStopTask = { handleStopFromOverlay() },
+                )
+            } else {
+                false
+            }
+        if (!overlayShown && !liveNotificationStarted) {
+            val hint =
+                if (overlayAllowed) {
+                    "悬浮窗显示失败，将保持前台显示日志"
+                } else {
+                    "如需显示进度悬浮窗，请授予悬浮窗权限"
+                }
+            Toast.makeText(appContext, hint, Toast.LENGTH_SHORT).show()
+        }
+
+        lastDispatchedTask = null
+        paused = false
+        updateComposeControlState(canStart = true)
+
+        agentJob =
+            viewModelScope.launch(Dispatchers.Default) {
+                try {
+                    val svc =
+                        if (effectiveUseShizuku) {
+                            waitForAccessibilityServiceConnection(timeoutMs = 6500L)
+                        } else {
+                            waitForAccessibilityServiceConnection(timeoutMs = 5000L)
+                        }
+                    if (!effectiveUseShizuku && svc == null) {
+                        appendLog("无障碍服务连接失败：未获取到服务实例")
+                        automationOverlay.complete("无障碍服务未连接", false)
+                        saveRunResult(false, "无障碍服务未连接", 0, logText)
+                        return@launch
+                    }
+                    if (effectiveUseShizuku && svc == null) {
+                        appendLog("Shizuku 模式：无障碍服务未连接，已停止执行")
+                        automationOverlay.complete("Shizuku 模式需无障碍连接", false)
+                        saveRunResult(false, "Shizuku 模式需无障碍连接", 0, logText)
+                        return@launch
+                    }
+
+                    val config =
+                        AgentConfiguration(
+                            useBackgroundVirtualDisplay = isBackgroundMode,
+                            useShizukuInteraction = effectiveUseShizuku,
+                        )
+
+                    if (isBackgroundMode) {
+                        withContext(Dispatchers.Main) {
+                            virtualDisplayStatus = "虚拟屏状态: 正在创建..."
+                        }
+                    }
+
+                    val agent =
+                        UiAutomationAgent(
+                            appContext = appContext,
+                            appPreferencesRepository = appPrefsRepository,
+                            config = config,
+                            automationOverlay = automationOverlay,
+                            appPackageManager = appPackageManager,
+                            screenshotOverlayGuard = screenshotOverlayGuard,
+                            promptTemplates = promptTemplates,
+                            localMnnInferenceEngine = localMnnInferenceEngine,
+                            modelScopeModelDownloader = modelScopeModelDownloader,
+                            virtualScreenPreviewOverlay = virtualScreenPreviewOverlay,
+                        )
+                    val result =
+                        agent.run(
+                            apiKey = apiKey,
+                            baseUrl = baseUrl,
+                            model = model,
+                            useThirdPartyApi = useThirdPartyApi,
+                            task = task,
+                            service = svc,
+                            control =
+                                object : UiAutomationAgent.Control {
+                                    override fun isPaused(): Boolean = paused
+                                    override fun onStepStarted(step: Int) {
+                                        mutableTask.update { it?.copy(steps = step) }
+                                        scheduleTaskRecordSync()
+                                    }
+                                    override fun onPauseAcknowledged(paused: Boolean) {
+                                        if (paused == this@AutomationViewModel.paused) {
+                                            mutableTask.update { it?.acknowledgePause(paused) }
+                                            virtualScreenPreviewOverlay.setPausedState(paused)
+                                            automationOverlay.setPaused(paused)
+                                            appendLog(if (paused) "已暂停，可随时继续" else "继续执行")
+                                            mutableTask.value?.runId?.let { runId ->
+                                                persistTaskRecordNow(
+                                                    status = if (paused) TaskStatus.PAUSED.name else TaskStatus.RUNNING.name,
+                                                    message = if (paused) "已暂停" else "执行中",
+                                                )
+                                                AutomationLogBridge.publishTaskState(
+                                                    appContext,
+                                                    runId,
+                                                    if (paused) TaskStatus.PAUSED.name else TaskStatus.RUNNING.name,
+                                                    if (paused) "已暂停" else "执行中",
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    override suspend fun confirm(message: String): Boolean {
+                                        if (autoApprove) return true
+                                        val hostActivity = hostActivityRef?.get()
+                                        if (hostActivity == null || hostActivity.isFinishing || hostActivity.isDestroyed) {
+                                            return false
+                                        }
+                                        return suspendCancellableCoroutine { cont ->
+                                            hostActivity.runOnUiThread {
+                                                val dialog =
+                                                    androidx.appcompat.app.AlertDialog.Builder(hostActivity)
+                                                        .setTitle("需要确认")
+                                                        .setMessage(message)
+                                                        .setCancelable(false)
+                                                        .setPositiveButton("确认") { _, _ ->
+                                                            if (cont.isActive) cont.resume(true)
+                                                        }
+                                                        .setNegativeButton("拒绝") { _, _ ->
+                                                            if (cont.isActive) cont.resume(false)
+                                                        }
+                                                        .create()
+                                                dialog.show()
+                                                cont.invokeOnCancellation {
+                                                    runCatching { dialog.dismiss() }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                            onLog = { msg ->
+                                appendLog(msg)
+                                if (isBackgroundMode) {
+                                    viewModelScope.launch(Dispatchers.Main) {
+                                        when {
+                                            msg.contains("虚拟屏已准备就绪") -> {
+                                                val displayId = VirtualDisplayController.getDisplayId()
+                                                virtualDisplayStatus = "虚拟屏状态: 已启动 (displayId=$displayId)"
+                                            }
+                                            msg.contains("虚拟屏准备失败") || msg.contains("虚拟屏模式启动失败") -> {
+                                                virtualDisplayStatus = "虚拟屏状态: 创建失败"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    appendLog("结束：${result.message}（steps=${result.steps}）")
+                    automationOverlay.complete(result.message, result.success)
+
+                    val finalLog = withContext(Dispatchers.Main) { logText }
+                    saveRunResult(result.success, result.message, result.steps, finalLog)
+                } catch (e: Exception) {
+                    if (e is CancellationException) {
+                        appendLog("已停止")
+                        saveRunResult(false, appContext.getString(R.string.ui_v2_cancelled), mutableTask.value?.steps ?: 0, logText, cancelled = true)
+                        // 窗口去留由 stopAgent(keepOverlay) 决定：悬浮窗内的“结束任务”要保留窗口。
+                        
+                    } else {
+                        appendLog("异常：${e.message}")
+                        automationOverlay.complete(e.message.orEmpty().ifBlank { "执行异常" }, false)
+                        val finalLog = withContext(Dispatchers.Main) { logText }
+                        saveRunResult(false, e.message ?: "执行异常", mutableTask.value?.steps ?: 0, finalLog)
+                    }
+                } finally {
+                    agentJob = null
+                    virtualScreenPreviewOverlay.hide()
+                    virtualDisplayStatusJob?.cancel()
+                    virtualDisplayStatusJob = null
+                    paused = false
+                    automationOverlay.setPaused(false)
+                    if (isBackgroundMode) {
+                        updateVirtualDisplayStatus()
+                    }
+                    checkAccessibilityStatus()
+                }
+            }
+
+        if (isBackgroundMode) {
+            virtualDisplayStatusJob?.cancel()
+            virtualDisplayStatusJob =
+                viewModelScope.launch {
+                    while (agentJob != null) {
+                        updateVirtualDisplayStatus()
+                        delay(1000L)
+                    }
+                }
+        }
+    }
+
+    private suspend fun waitForAccessibilityServiceConnection(
+        timeoutMs: Long = 3500L,
+        pollMs: Long = 120L,
+    ): PhoneAgentAccessibilityService? {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            PhoneAgentAccessibilityService.instance?.let { return it }
+            delay(pollMs)
+        }
+        return PhoneAgentAccessibilityService.instance
+    }
+
+    private fun ensureShizukuPermissionGranted(): Boolean {
+        if (!ShizukuBridge.pingBinder()) return false
+        if (ShizukuBridge.hasPermission()) return true
+
+        runCatching {
+            Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
+        }
+        return false
+    }
+
+    fun stopAgent(keepOverlay: Boolean = false) {
+        val job = agentJob
+        val hadRunning = job != null
+        if (job != null) {
+            job.cancel()
+        }
+        paused = false
+        updateComposeControlState(canStart = composeCanStart)
+        appendLog("已请求停止")
+        if (!hadRunning) {
+            appendLog("已停止")
+        }
+        if (keepOverlay) {
+            // 悬浮窗内的“结束任务”：只收任务，窗口留着继续看日志、直接下发新任务。
+            automationOverlay.markFinished("任务已结束")
+        } else {
+            automationOverlay.hide()
+        }
+        virtualScreenPreviewOverlay.hide()
+        virtualDisplayStatusJob?.cancel()
+        virtualDisplayStatusJob = null
+        if (isBackgroundMode ||
+            VirtualDisplayController.shouldUseVirtualDisplay ||
+            VirtualDisplayController.isVirtualDisplayStarted()
+        ) {
+            VirtualDisplayController.cleanupAsync(appContext)
+            updateVirtualDisplayStatus()
+        }
+        checkAccessibilityStatus()
+    }
+
+    /** 设置页“悬浮窗开关”读到的真实窗口状态。 */
+    fun overlayVisibleFlow(): kotlinx.coroutines.flow.StateFlow<Boolean> = automationOverlay.visibleFlow
+
+    /** 设置页直接控制悬浮窗：打开就真的显示，关闭就移除窗口（不是隐藏）。 */
+    fun setOverlayEnabled(enabled: Boolean) {
+        if (enabled) {
+            if (!automationOverlay.canDrawOverlays(appContext)) {
+                Toast.makeText(appContext, "请先授予悬浮窗权限", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val ok = automationOverlay.showIdle(appContext, taskActive = agentJob != null)
+            if (!ok) {
+                Toast.makeText(appContext, "悬浮窗显示失败，请检查悬浮窗权限", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            automationOverlay.hide()
+        }
+    }
+
+    private fun handleStopFromOverlay() {
+        stopAgent(keepOverlay = true)
+    }
+
+    /** 悬浮窗里输入的新任务：直接复用主页的启动链路。 */
+    private fun submitTaskFromOverlay(goal: String) {
+        val cleaned = goal.trim()
+        if (cleaned.isBlank()) return
+        if (agentJob != null) {
+            Toast.makeText(appContext, appContext.getString(R.string.ui_v2_overlay_task_busy), Toast.LENGTH_SHORT).show()
+            return
+        }
+        taskText = cleaned
+        startAgent()
+    }
+
+    fun togglePause() {
+        if (agentJob == null) return
+        paused = !paused
+        mutableTask.update { it?.requestPause(paused) }
+        updateComposeControlState(canStart = composeCanStart)
+        automationOverlay.setPaused(paused)
+        appendLog(if (paused) appContext.getString(R.string.ui_v2_pause_requested) else appContext.getString(R.string.ui_v2_running))
+        mutableTask.value?.runId?.let { runId ->
+            persistTaskRecordNow(
+                status = if (paused) TaskStatus.PAUSE_REQUESTED.name else TaskStatus.RUNNING.name,
+                message = if (paused) "正在暂停" else "执行中",
+            )
+            AutomationLogBridge.publishTaskState(
+                appContext,
+                runId,
+                if (paused) TaskStatus.PAUSE_REQUESTED.name else TaskStatus.RUNNING.name,
+                if (paused) "正在暂停" else "执行中",
+            )
+        }
+    }
+
+    private fun initSherpaModel() {
+        // 语音模型功能已移除：保留空实现，避免残留调用链在运行期加载原生库。
+    }
+
+    private fun startVoiceInputAnimation() {
+        voiceInputAnimJob?.cancel()
+        savedTaskText = taskText
+        isListening = true
+        voiceInputAnimJob =
+            viewModelScope.launch {
+                var dotCount = 1
+                while (true) {
+                    val dots = ".".repeat(dotCount)
+                    taskText = "正在语音输入$dots"
+                    dotCount = if (dotCount >= 3) 1 else dotCount + 1
+                    delay(400)
+                }
+            }
+    }
+
+    private fun stopVoiceInputAnimation() {
+        voiceInputAnimJob?.cancel()
+        voiceInputAnimJob = null
+        isListening = false
+    }
+
+    fun startLocalVoiceInput() {
+        // R-07：取共享实例；本地缓存的过期引用（已被注册表释放）回退为注册表现值。
+        val recognizer =
+            sherpaSpeechRecognizer
+                ?.takeIf { it.isReady() || it.isListening() || it.isInitializing() }
+                ?: SherpaSpeechRegistry.attach(appContext)
+                ?.also { sherpaSpeechRecognizer = it }
+        if (recognizer == null) {
+            Toast.makeText(appContext, "语音模型未初始化，请稍候重试", Toast.LENGTH_SHORT).show()
+            initSherpaModel()
+            return
+        }
+        if (!recognizer.isReady()) {
+            // 未就绪（首次排队中或此前初始化失败）：现场再触发一次初始化（幂等）后提示等待。
+            if (!recognizer.isInitializing() && !sherpaInitializing) {
+                initSherpaModel()
+            }
+            Toast.makeText(appContext, "语音模型加载中，请稍候…", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isListeningInternal) return
+
+        voicePrefix =
+            taskText.trim().let { prefix ->
+                if (prefix.isBlank()) "" else if (prefix.endsWith(" ")) prefix else "$prefix "
+            }
+
+        startVoiceInputAnimation()
+
+        recognizer.startListening(
+            object : SherpaSpeechRecognizer.RecognitionListener {
+                override fun onPartialResult(text: String) {
+                    stopVoiceInputAnimation()
+                    val txt = (voicePrefix + text).trimStart()
+                    taskText = txt
+                }
+
+                override fun onResult(text: String) {
+                    stopVoiceInputAnimation()
+                    val txt = (voicePrefix + text).trimStart()
+                    taskText = txt
+                }
+
+                override fun onAmplitude(amplitude: Float) {
+                }
+
+                override fun onFinalResult(text: String) {
+                    stopVoiceInputAnimation()
+                    val txt = (voicePrefix + text).trimStart()
+                    taskText = if (txt.isBlank()) savedTaskText else txt
+                    stopLocalVoiceInput(triggerRecognizerStop = false)
+                }
+
+                override fun onError(exception: Exception) {
+                    stopVoiceInputAnimation()
+                    taskText = savedTaskText
+                    Toast.makeText(appContext, "识别失败: ${exception.message}", Toast.LENGTH_SHORT).show()
+                    stopLocalVoiceInput(triggerRecognizerStop = false)
+                }
+
+                override fun onTimeout() {
+                    stopVoiceInputAnimation()
+                    taskText = savedTaskText
+                    Toast.makeText(appContext, "语音识别超时", Toast.LENGTH_SHORT).show()
+                    stopLocalVoiceInput(triggerRecognizerStop = false)
+                }
+            },
+        )
+
+        isListeningInternal = true
+    }
+
+    fun stopLocalVoiceInput(triggerRecognizerStop: Boolean = true) {
+        // R-07：取共享实例；本地缓存的过期引用回退为注册表现值。
+        // 回退路径本次 attach 持一票，函数收尾配对 release，避免引用计数泄漏。
+        var attachedHere = false
+        val recognizer =
+            sherpaSpeechRecognizer
+                ?.takeIf { it.isReady() || it.isListening() || it.isInitializing() }
+                ?: SherpaSpeechRegistry.attach(appContext)
+                    .also { attachedHere = true }
+        stopVoiceInputAnimation()
+
+        val currentText = taskText
+        if (currentText.startsWith("正在语音输入")) {
+            taskText = savedTaskText
+        }
+
+        if (triggerRecognizerStop) {
+            if (recognizer?.isListening() == true) {
+                recognizer.stopListening()
+            } else {
+                recognizer?.cancel()
+            }
+        } else {
+            recognizer?.cancel()
+        }
+
+        isListeningInternal = false
+        if (attachedHere) {
+            SherpaSpeechRegistry.release()
+        }
+    }
+
+    private fun getApiKey(): String {
+        if (appPrefsRepository.getUseAquariusApiBlocking()) {
+            return appPrefsRepository.getActiveAquariusApiKeyBlocking()
+        }
+        val key = appPrefsRepository.getApiKeyBlocking()
+        if (key.isNotBlank()) return key
+        return appPrefsRepository.getAutoglmApiKeyBlocking()
+    }
+
+    private fun isLocalModelEnabled(): Boolean {
+        return appPrefsRepository.getApiUseLocalModelBlocking()
+    }
+
+    private fun resolveApiBaseUrl(): String {
+        if (appPrefsRepository.getUseAquariusApiBlocking()) {
+            return AquariusApiClient.AQUARIUS_API_V1_BASE_URL
+        }
+        val useThirdParty = appPrefsRepository.getApiUseThirdPartyBlocking()
+        val useLocalModel = appPrefsRepository.getApiUseLocalModelBlocking()
+        if (useLocalModel) return AutoGlmClient.DEFAULT_BASE_URL
+        if (!useThirdParty) return AutoGlmClient.DEFAULT_BASE_URL
+        val rawUrl = appPrefsRepository.getApiThirdPartyBaseUrlBlocking().trim()
+        return rawUrl.ifBlank { AutoGlmClient.DEFAULT_BASE_URL }
+    }
+
+    private fun resolveAutomationModel(): String {
+        if (appPrefsRepository.getUseAquariusApiBlocking()) {
+            return AquariusApiClient.AQUARIUS_AUTOMATION_MODEL
+        }
+        val useLocalModel = appPrefsRepository.getApiUseLocalModelBlocking()
+        val useThirdParty = appPrefsRepository.getApiUseThirdPartyBlocking()
+        if (useLocalModel) return ModelScopeModelDownloader.QWEN35_MODEL_NAME
+        if (!useThirdParty) return AutoGlmClient.PHONE_MODEL
+
+        val rawModel = appPrefsRepository.getApiThirdPartyModelBlocking().trim()
+        return rawModel.ifBlank { AutoGlmClient.DEFAULT_MODEL }
+    }
+
+    fun appendLog(message: String) {
+        val originatingRunId = mutableTask.value?.runId
+        viewModelScope.launch(Dispatchers.Main) {
+            // 旧一轮运行排队的日志不得覆盖当前运行。
+            if (mutableTask.value?.runId != originatingRunId) return@launch
+
+            logText =
+                buildString {
+                    val existing = logText.trimEnd()
+                    if (existing.isNotBlank()) {
+                        append(existing)
+                        append('\n')
+                    }
+                    append(message)
+                }
+            mutableTask.update { it?.copy(log = logText) }
+            automationOverlay.updateFromLogLine(message)
+            if (mirrorLogsToMain) {
+                AutomationLogBridge.publish(appContext, message, originatingRunId.orEmpty())
+            }
+            scheduleTaskRecordSync()
+        }
+    }
+
+    // ─── 任务历史落库 ────────────────────────────────────────────────
+
+    private var taskLogSyncJob: Job? = null
+
+    private fun snapshotTaskEntity(status: String? = null, message: String = ""): AutomationTaskEntity? {
+        val snapshot = mutableTask.value ?: return null
+        return AutomationTaskEntity(
+            runId = snapshot.runId,
+            goal = snapshot.goal,
+            status = status ?: snapshot.status.name,
+            steps = snapshot.steps,
+            log = logText,
+            message = message.ifBlank { snapshot.message },
+            startedAt = snapshot.startedAt,
+            updatedAt = System.currentTimeMillis(),
+        )
+    }
+
+    /** 关键节点（开始/暂停/结束）立即写入任务记录。 */
+    private fun persistTaskRecordNow(status: String? = null, message: String = "") {
+        val record = snapshotTaskEntity(status, message) ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { automationTaskRepository.save(record) }
+                .onFailure { Log.w("AutomationViewModel", "保存任务历史失败: ${it.message}") }
+        }
+    }
+
+    /** 日志增量落库：600ms 合并一次，避免逐行写库。 */
+    private fun scheduleTaskRecordSync() {
+        if (taskLogSyncJob?.isActive == true) return
+        taskLogSyncJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(600)
+            val record = snapshotTaskEntity() ?: return@launch
+            runCatching { automationTaskRepository.save(record) }
+                .onFailure { Log.w("AutomationViewModel", "同步任务日志失败: ${it.message}") }
+        }
+    }
+
+    /** 供任务详情页按 runId 观察历史记录。 */
+    fun observeTaskHistory(runId: String) = automationTaskRepository.observe(runId)
+
+    fun updateVirtualDisplayStatus() {
+        try {
+            val isStarted = VirtualDisplayController.isVirtualDisplayStarted()
+            val displayId = VirtualDisplayController.getDisplayId()
+            val shouldUse = VirtualDisplayController.shouldUseVirtualDisplay
+
+            val statusValue =
+                buildString {
+                    if (isStarted && displayId != null) {
+                        val configSummary = VirtualDisplayConfig.summary(appContext)
+                        append(
+                            appContext.getString(
+                                R.string.automation_virtual_display_status_running_detail,
+                                displayId.toString(),
+                                configSummary,
+                            ),
+                        )
+                    } else if (shouldUse) {
+                        append(appContext.getString(R.string.automation_virtual_display_status_preparing))
+                    } else {
+                        append(appContext.getString(R.string.automation_virtual_display_status_not_started))
+                    }
+                }
+            virtualDisplayStatus = statusValue
+        } catch (e: Exception) {
+            virtualDisplayStatus =
+                appContext.getString(
+                    R.string.automation_virtual_display_status_error,
+                    e.message ?: "未知错误",
+                )
+        }
+    }
+
+    fun startRecommendTaskRotation() {
+        if (recommendTasks.isEmpty()) return
+        try {
+            currentRecommendIndex = 0
+            recommendText = recommendTasks[currentRecommendIndex]
+
+            recommendJob?.cancel()
+            recommendJob =
+                viewModelScope.launch {
+                    delay(4000)
+                    while (true) {
+                        currentRecommendIndex = (currentRecommendIndex + 1) % recommendTasks.size
+                        recommendText = recommendTasks[currentRecommendIndex]
+                        delay(4000)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("AutomationViewModel", "推荐任务轮换启动失败: ${e.message}", e)
+        }
+    }
+
+    private fun bringMainActivityToFront() {
+        val intent =
+            Intent(appContext, MainActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION,
+                )
+            }
+        appContext.startActivity(intent)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        runCatching { appContext.unregisterReceiver(stopFromOverlayReceiver) }
+        runCatching { appContext.unregisterReceiver(pauseToggleReceiver) }
+        recommendJob?.cancel()
+        recommendJob = null
+        stopLocalVoiceInput(triggerRecognizerStop = true)
+        if (sherpaRegistryAcquired) {
+            // R-07：归还一票引用；若 MainActivity 侧仍持有引用则共享实例继续存活，
+            // 引用计数归零时由注册表确定性 close native 资源。
+            SherpaSpeechRegistry.release()
+            sherpaRegistryAcquired = false
+        }
+        sherpaSpeechRecognizer = null
+        OverlayTaskBridge.clear()
+        stopAgent()
+    }
+}

@@ -1,0 +1,99 @@
+# OS / editor files
+.DS_Store
+._*
+*.iml
+.idea/
+.kotlin/
+.vscode/
+wiki/
+
+# Android / Gradle local state
+.android/
+.android-codex/
+.cxx/
+.externalNativeBuild/
+.gradle/
+.gradle-build/
+.gradle-codex/
+.java-home-codex/
+captures/
+local.properties
+release/
+build/
+*.compiler.options
+
+# Local environment, temp files, and logs
+.env
+.env.*
+!.env.example
+*.bak*
+*.log
+logs/
+/temp/
+.tmp_material_113/
+.tmp_material_113.zip
+.trae/documents/
+key/
+
+# Signing keys and certificates
+*.jks
+*.keystore
+*.p12
+*.pem
+*.pfx
+
+# Packaged build artifacts
+*.aab
+*.aar
+*.apk
+
+# Large local model assets
+app/src/main/assets/sherpa-models/**
+!app/src/main/assets/sherpa-models/.keep
+!app/src/main/assets/sherpa-models/README.md
+
+# Local latex library source clone (using Maven dependency instead)
+/latex/
+
+# Local tool configs and secrets
+.opencode/
+analytics.settings
+tmp_onboarding_check.png
+
+# Local planning / scratch workspace files
+.sisyphus/
+.qoder/
+.omo/
+nul
+
+# Local test artifacts / temporary outputs
+*.tmp
+*.temp
+logcat*.txt
+ui_dump*.xml
+test-output/
+playwright-report/
+allure-results/
+allure-report/
+coverage/
+*.profraw
+*.profdata
+
+# Local performance profiling artifacts
+Aries-site/lighthouse-*.report.html
+Aries-site/lighthouse-*.report.json
+
+.codex-local-archive/
+
+# JavaScript dependencies (site, design tools, worker)
+node_modules/
+.shots
+
+# AtomCode local session/config files
+.atomcode/
+atomcode-*.md
+
+# Local corrupted-build quarantine snapshots (do not commit)
+app/build_corrupt_*/
+app/cxx_corrupt_*/
+.workbuddy/memory/2026-10-31.md

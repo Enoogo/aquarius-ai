@@ -1,0 +1,175 @@
+/*
+ * Aquarius AI - Android UI Automation Framework
+ * Copyright (C) 2025-2026 ZG0704666
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+package com.ai.phoneagent
+
+import android.app.Application
+import android.content.Context
+import android.os.Build
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
+import coil.Coil
+import coil.ImageLoader
+import com.ai.phoneagent.core.settings.AppUiPrefs
+import com.ai.phoneagent.telemetry.TelemetryHeartbeatManager
+import com.ai.phoneagent.vdiso.ShizukuVirtualDisplayEngine
+import com.ai.phoneagent.di.appModule
+import com.ai.phoneagent.di.dataModule
+import com.ai.phoneagent.di.networkModule
+import com.ai.phoneagent.di.uiModule
+import org.koin.android.ext.koin.androidContext
+import org.koin.android.ext.koin.androidLogger
+import org.koin.core.context.startKoin
+import org.koin.core.logger.Level
+import org.lsposed.hiddenapibypass.HiddenApiBypass
+
+/**
+ * 全局 Application 入口。
+ *
+ * **用途**
+ * - 承担应用进程启动时的最早初始化：
+ *   - Android P(28)+ 下通过 `HiddenApiBypass` 尝试放宽隐藏 API 限制（用于虚拟屏创建等系统服务反射调用）。
+ *   - 初始化全局状态（见 [AppState]）。
+ *
+ * **使用注意事项**
+ * - 该初始化必须保持"尽力而为（best effort）"策略：任何失败都不应阻塞 App 启动。
+ * - 不要在这里做耗时操作（避免冷启动卡顿）。
+ */
+class AquariusAgentApp : Application() {
+
+    companion object {
+        private const val TAG = "AquariusAgentApp"
+
+        @JvmStatic
+        fun logi(msg: String) {
+            android.util.Log.i(TAG, msg)
+        }
+
+        @JvmStatic
+        fun logw(msg: String, t: Throwable? = null) {
+            if (t != null) android.util.Log.w(TAG, msg, t)
+            else android.util.Log.w(TAG, msg)
+        }
+    }
+
+    /**
+     * 把 [AppUiPrefs] 里保存的语言应用到整个应用。
+     *
+     * 与系统「设置 → 应用 → 语言」同源：走 `AppCompatDelegate`，API 33+ 由系统
+     * `LocaleManager` 接管，低版本由 AppCompat 包装 Context 并重建 Activity。
+     */
+    private fun applySavedLanguage() {
+        try {
+            val tag = AppUiPrefs.languageTag(this)
+            val locales = LocaleListCompat.forLanguageTags(tag)
+            if (AppCompatDelegate.getApplicationLocales() != locales) {
+                AppCompatDelegate.setApplicationLocales(locales)
+            }
+        } catch (t: Throwable) {
+            logw("applySavedLanguage failed", t)
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+
+        // 跟随系统自动切换日夜模式
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+
+        // 应用用户选择的界面语言（设置在「外观 → 语言」）。必须在任何界面创建前生效，
+        // 否则首帧仍是旧语言；AppCompat 会把该 Locale 注入 Activity 的 Configuration。
+        applySavedLanguage()
+
+        // 初始化全局上下文
+        AppState.init(this)
+
+        // 初始化 Koin 依赖注入框架。后续启动组件只从本次返回的容器解析，
+        // 避免通过 GlobalContext 引入隐式 service locator 或第二套实例。
+        val koin = startKoin {
+            androidLogger(if (android.util.Log.isLoggable("Koin", android.util.Log.DEBUG)) Level.DEBUG else Level.ERROR)
+            androidContext(this@AquariusAgentApp)
+            modules(appModule, dataModule, networkModule, uiModule)
+        }.koin
+
+        try {
+            val engine = koin.get<ShizukuVirtualDisplayEngine>()
+            VirtualDisplayController.initialize(engine)
+            logi("VirtualDisplayController initialized from Koin")
+        } catch (t: Throwable) {
+            logw("VirtualDisplayController initialization failed", t)
+        }
+
+        try {
+            koin.get<AutomationLiveNotification>().initialize()
+            logi("AutomationLiveNotification initialized from Koin")
+        } catch (t: Throwable) {
+            logw("AutomationLiveNotification initialization failed", t)
+        }
+
+        // 配置 Coil ImageLoader（使用 Koin 管理的实例）
+        try {
+            val imageLoader = koin.get<ImageLoader>()
+            Coil.setImageLoader { imageLoader }
+            logi("Coil ImageLoader initialized from Koin")
+        } catch (t: Throwable) {
+            logw("Coil ImageLoader initialization failed", t)
+        }
+
+        try {
+            koin.get<TelemetryHeartbeatManager>().start()
+            logi("TelemetryHeartbeatManager initialized")
+        } catch (t: Throwable) {
+            logw("TelemetryHeartbeatManager initialization failed", t)
+        }
+
+        // 初始化 HiddenApiBypass（虚拟屏创建必需）
+        try {
+            if (Build.VERSION.SDK_INT >= 28) {
+                HiddenApiBypass.addHiddenApiExemptions("L")
+                logi("HiddenApiBypass initialized successfully")
+            }
+        } catch (t: Throwable) {
+            logw("HiddenApiBypass initialization failed", t)
+        }
+    }
+}
+
+/**
+ * 全局状态与跨模块"静态入口"。
+ *
+ * **用途**
+ * - 持有 `applicationContext`（避免各处传递 Context）。
+ * - 初始化任务控制器和虚拟屏相关状态。
+ *
+ * **典型用法**
+ * - Kotlin 侧需要 Context 时：`AppState.getAppContext()`
+ */
+object AppState {
+
+    @Volatile
+    private var appContext: Context? = null
+
+    @JvmStatic
+    fun init(context: Context) {
+        val ctx = context.applicationContext
+        appContext = ctx
+        AquariusAgentApp.logi("AppState initialized")
+    }
+
+    @JvmStatic
+    fun getAppContext(): Context? = appContext
+}

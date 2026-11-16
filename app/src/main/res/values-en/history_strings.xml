@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="history_dialog_title">History</string>
+    <string name="history_empty">No history yet</string>
+    <string name="history_new_chat">New chat</string>
+    <string name="history_current_chat_is_new">Already a new chat</string>
+</resources>

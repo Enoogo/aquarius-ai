@@ -1,0 +1,424 @@
+package com.ai.phoneagent.core.designsystem.theme.glass
+
+import android.annotation.SuppressLint
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastCoerceAtMost
+import androidx.compose.ui.util.fastCoerceIn
+import com.ai.phoneagent.core.designsystem.R
+import com.ai.phoneagent.core.designsystem.theme.LocalAquariusBackdrop
+import com.ai.phoneagent.core.designsystem.theme.aquariusGlass
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.BackdropEffectScope
+import com.kyant.backdrop.RuntimeShader
+import com.kyant.backdrop.asComposeShader
+import com.kyant.backdrop.backdrops.emptyBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.isRenderEffectSupported
+import com.kyant.backdrop.isRuntimeShaderSupported
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+
+/**
+ * 当前窗口背景录制层。
+ *
+ * 液态玻璃的所有折射、模糊与增艳都基于这一层真实像素，而不是绘制时伪造的渐变边缘。
+ * 由 [com.ai.phoneagent.core.designsystem.theme.AquariusBackdrop] 在主题根部提供；
+ * 页面希望内容从玻璃下方穿过时，可额外录制一层内容 backdrop 后与主题 backdrop 组合。
+ */
+val LocalAquariusGlassBackdrop = staticCompositionLocalOf<Backdrop> { emptyBackdrop() }
+
+/**
+ * 液态玻璃参数档位（边框统一为细描边，与静态玻璃 aquariusGlass 一致）：
+ * - [Pill]：48dp 胶囊按钮 —— vibrancy + blur(2dp)，无 lens 边缘
+ * - [Bar]：导航胶囊容器 —— vibrancy + blur(8dp) + lens(24dp, 24dp)
+ * - [Card]：卡片/对话框 —— colorControls + blur(16dp) + lens(24dp, 48dp, depthEffect)
+ * - [Chip]：静态小标签 —— blur(8dp)，无 lens 边缘，不参与按压
+ * - [Bubble]：聊天气泡 —— vibrancy + blur(8dp)，无 lens 边缘、无 depthEffect
+ *   （滚动列表中数量多、更新频繁，档位保持轻量）
+ */
+enum class AquariusGlassTier { Pill, Bar, Card, Chip, Bubble }
+
+/** 一档液态玻璃的渲染参数（像素换算在各绘制阶段完成）。 */
+@Immutable
+data class AquariusGlassSpec(
+    val blur: Dp,
+    val lensHeight: Dp,
+    val lensAmount: Dp,
+    val vibrancy: Boolean,
+    val brightness: Float,
+    val saturation: Float,
+    val depthEffect: Boolean,
+)
+
+fun BackdropEffectScope.applyAquariusGlassSpec(spec: AquariusGlassSpec) {
+    with(spec) {
+        if (vibrancy) vibrancy()
+        if (brightness != 0f || saturation != 1f) {
+            colorControls(brightness = brightness, saturation = saturation)
+        }
+        blur(blur.toPx())
+        // lens 会沿形状边缘画出折射/色散边框；边框统一改回细描边后，
+        // 仅 Bar（导航）与 Card（大卡片）保留 lens 边缘效果。
+        if (lensAmount > 0.dp) {
+            lens(lensHeight.toPx(), lensAmount.toPx(), depthEffect = depthEffect)
+        }
+    }
+}
+
+/** 按档位读取设计令牌，避免在调用点硬编码 dp。 */
+@Composable
+fun aquariusGlassSpec(tier: AquariusGlassTier): AquariusGlassSpec {
+    val dark = LocalAquariusBackdrop.current.dark
+    return when (tier) {
+        AquariusGlassTier.Pill -> AquariusGlassSpec(
+            blur = dimensionResource(R.dimen.aquarius_liquid_blur_pill),
+            lensHeight = 0.dp,
+            lensAmount = 0.dp,
+            vibrancy = true,
+            brightness = 0f,
+            saturation = 1f,
+            depthEffect = false,
+        )
+
+        AquariusGlassTier.Bar -> AquariusGlassSpec(
+            blur = dimensionResource(R.dimen.aquarius_liquid_blur_bar),
+            lensHeight = dimensionResource(R.dimen.aquarius_liquid_lens_bar_height),
+            lensAmount = dimensionResource(R.dimen.aquarius_liquid_lens_bar_amount),
+            vibrancy = true,
+            brightness = 0f,
+            saturation = 1f,
+            depthEffect = false,
+        )
+
+        AquariusGlassTier.Card -> AquariusGlassSpec(
+            blur = dimensionResource(R.dimen.aquarius_liquid_blur_card),
+            lensHeight = dimensionResource(R.dimen.aquarius_liquid_lens_card_height),
+            lensAmount = dimensionResource(R.dimen.aquarius_liquid_lens_card_amount),
+            vibrancy = false,
+            brightness = if (dark) 0f else 0.2f,
+            saturation = if (dark) 1.5f else 1f,
+            depthEffect = true,
+        )
+
+        AquariusGlassTier.Chip -> AquariusGlassSpec(
+            blur = dimensionResource(R.dimen.aquarius_liquid_blur_bar),
+            lensHeight = 0.dp,
+            lensAmount = 0.dp,
+            vibrancy = true,
+            brightness = 0f,
+            saturation = 1f,
+            depthEffect = false,
+        )
+
+        AquariusGlassTier.Bubble -> AquariusGlassSpec(
+            blur = dimensionResource(R.dimen.aquarius_liquid_blur_bubble),
+            lensHeight = 0.dp,
+            lensAmount = 0.dp,
+            vibrancy = true,
+            brightness = 0f,
+            saturation = 1f,
+            depthEffect = false,
+        )
+    }
+}
+
+/** 玻璃表面底色：透过玻璃看到的染色层，保证在纯黑壁纸/无模糊设备上依然可读。 */
+@Composable
+fun aquariusGlassSurfaceColor(tier: AquariusGlassTier): Color {
+    val dark = LocalAquariusBackdrop.current.dark
+    val res = when (tier) {
+        AquariusGlassTier.Pill -> if (dark) R.color.aquarius_liquid_surface_dark else R.color.aquarius_liquid_surface_light
+        AquariusGlassTier.Bar -> if (dark) R.color.aquarius_liquid_bar_dark else R.color.aquarius_liquid_bar_light
+        AquariusGlassTier.Card -> if (dark) R.color.aquarius_liquid_card_dark else R.color.aquarius_liquid_card_light
+        AquariusGlassTier.Chip -> if (dark) R.color.aquarius_liquid_chip_dark else R.color.aquarius_liquid_chip_light
+        AquariusGlassTier.Bubble -> if (dark) R.color.aquarius_liquid_bubble_dark else R.color.aquarius_liquid_bubble_light
+    }
+    return colorResource(res)
+}
+
+@Composable
+fun aquariusGlassSelectionTint(): Color {
+    val dark = LocalAquariusBackdrop.current.dark
+    return colorResource(
+        if (dark) R.color.aquarius_liquid_selected_dark else R.color.aquarius_liquid_selected_light
+    )
+}
+
+/** 高光样式：Bar 导航与 Card 保留方向高光/纯色描边；Pill/Bubble 边缘回归细描边（无高光）。 */
+fun aquariusGlassHighlight(tier: AquariusGlassTier): Highlight? =
+    when (tier) {
+        AquariusGlassTier.Bar -> Highlight.Default
+        AquariusGlassTier.Card -> Highlight.Plain
+        AquariusGlassTier.Chip -> Highlight.Default
+        // Pill/Bubble：与静态玻璃一致的细描边外观，不再叠加方向高光。
+        AquariusGlassTier.Pill, AquariusGlassTier.Bubble -> null
+    }
+
+/** DrawScope 内按 shape 构建 Path（Outline → Path），用于 onDrawSurface 裁剪与描边。 */
+internal fun DrawScope.aquariusShapePath(shape: Shape): Path {
+    val path = Path()
+    when (val outline = shape.createOutline(size, layoutDirection, this)) {
+        is Outline.Rectangle -> path.addRect(outline.rect)
+        is Outline.Rounded -> path.addRoundRect(outline.roundRect)
+        is Outline.Generic -> path.addPath(outline.path)
+    }
+    return path
+}
+
+/** drawWithCache 内复用：Outline → Path（供 API 30 静态降级与实色表面一次性构建）。 */
+internal fun aquariusOutlinePath(outline: Outline): Path = when (outline) {
+    is Outline.Rectangle -> Path().apply { addRect(outline.rect) }
+    is Outline.Rounded -> Path().apply { addRoundRect(outline.roundRect) }
+    is Outline.Generic -> Path().apply { addPath(outline.path) }
+}
+
+/**
+ * 表面修饰符（M3 版）。
+ *
+ * 旧实现走 kyant `drawBackdrop`：真实背景采样 + RenderEffect 模糊 + AGSL 折射，
+ * 即「液态玻璃」。全站改 Material Design 3 后该材质整体退场，本函数改为
+ * 转发到 [aquariusGlass]（M3 填充面 + 1dp 描边），并保留按压缩放（M3 的
+ * state layer 之外仍有轻微形变反馈，观感更接近 M3 expressive）。
+ *
+ * 参数保持原样：调用点遍布全站（气泡、输入框、卡片、悬浮按钮），
+ * `tier`/`backdrop`/`highlight`/`shadow`/`innerShadow` 仅为兼容保留，不再参与绘制。
+ */
+@Composable
+fun Modifier.aquariusLiquidGlass(
+    shape: Shape,
+    tier: AquariusGlassTier = AquariusGlassTier.Pill,
+    backdrop: Backdrop = LocalAquariusGlassBackdrop.current,
+    surfaceColor: Color = Color.Unspecified,
+    tint: Color = Color.Transparent,
+    selected: Boolean = false,
+    highlight: Highlight? = aquariusGlassHighlight(tier),
+    shadow: Shadow? = null,
+    innerShadow: InnerShadow? = null,
+    layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
+    onDrawSurface: (DrawScope.() -> Unit)? = null,
+): Modifier {
+    val fill = if (surfaceColor == Color.Unspecified) null else surfaceColor
+    val base = if (layerBlock != null) {
+        graphicsLayer { layerBlock.invoke(this) }
+    } else {
+        Modifier
+    }
+    return base.then(aquariusGlass(shape, selected, fill, tint))
+}
+
+/**
+ * 按压交互状态：白色渐显 + 跟随手指的径向高光点 + 轻微缩放/挤压。
+ * 与参考实现 `InteractiveHighlight` 一致（spring(0.5, 300)）。
+ *
+ * @param enabled 禁用的控件不响应按压（surface 像素级稳定），由调用方同时
+ *   不挂载 [gestureModifier]；两者共同保证 disabled 玻璃完全静止。
+ */
+class AquariusPressState internal constructor(
+    private val scope: CoroutineScope,
+    private val enabled: Boolean,
+    private val positionProvider: (size: Size, offset: Offset) -> Offset,
+) {
+
+    private val pressProgressAnimation = Animatable(0f, 0.001f)
+    private val positionAnimation = Animatable(Offset.Zero, Offset.VectorConverter, Offset.VisibilityThreshold)
+
+    private var startPosition = Offset.Zero
+
+    val pressProgress: Float get() = pressProgressAnimation.value
+    val offset: Offset get() = positionAnimation.value - startPosition
+
+    private val shader: RuntimeShader? =
+        if (isRuntimeShaderSupported()) {
+            RuntimeShader(
+                """
+uniform float2 size;
+layout(color) uniform half4 color;
+uniform float radius;
+uniform float2 position;
+
+half4 main(float2 coord) {
+    float dist = distance(coord, position);
+    float intensity = smoothstep(radius, radius * 0.5, dist);
+    return color * intensity;
+}"""
+            )
+        } else {
+            null
+        }
+
+    /**
+     * 绘制层：先按 shape 裁剪叠加高光，再绘制内容，保证图标文字始终在最上层。
+     * 依赖本实例的按压进度/着色器状态，无法改为 Modifier 扩展函数。
+     */
+    @SuppressLint("ModifierFactoryExtensionFunction")
+    fun highlightModifier(shape: Shape): Modifier = actionHighlightModifier(shape, Color.White)
+
+    /**
+     * 高光颜色可定制的版本：[highlight] 的 alpha 作为满按压强度的系数
+     * （白色 + alpha 1 时与参考实现完全一致）。
+     */
+    @SuppressLint("ModifierFactoryExtensionFunction")
+    fun actionHighlightModifier(shape: Shape, highlight: Color): Modifier = Modifier.drawWithContent {
+        val progress = pressProgressAnimation.value
+        // 高光自带 shape 裁剪：drawRect(BlendMode.Plus) 在透明角落会留下白色矩形，
+        // 必须把高光约束进玻璃形状的 Path 内。
+        val clipPath = aquariusShapePath(shape)
+        val baseAlpha = highlight.alpha
+        if (progress > 0f && baseAlpha > 0f) {
+            val shader = shader
+            if (shader != null) {
+                drawPath(clipPath, highlight.copy(alpha = 0.08f * baseAlpha * progress), blendMode = BlendMode.Plus)
+                shader.apply {
+                    val position = positionProvider(size, positionAnimation.value)
+                    setFloatUniform("size", size.width, size.height)
+                    setColorUniform("color", highlight.copy(alpha = 0.15f * baseAlpha * progress))
+                    setFloatUniform("radius", size.minDimension * 1.5f)
+                    setFloatUniform(
+                        "position",
+                        position.x.fastCoerceIn(0f, size.width),
+                        position.y.fastCoerceIn(0f, size.height),
+                    )
+                }
+                drawPath(clipPath, ShaderBrush(shader.asComposeShader()), blendMode = BlendMode.Plus)
+            } else {
+                // API 31/32 没有 AGSL：退化为整体白色渐显。
+                drawPath(clipPath, highlight.copy(alpha = 0.25f * baseAlpha * progress), blendMode = BlendMode.Plus)
+            }
+        }
+        drawContent()
+    }
+
+    /** 手势层：不消费事件，因此不会影响原有的 clickable / draggable。 */
+    val gestureModifier: Modifier = Modifier.pointerInput(scope, enabled) {
+        if (!enabled) return@pointerInput
+        inspectDragGestures(
+            onDragStart = { down ->
+                startPosition = down.position
+                scope.launch {
+                    launch { pressProgressAnimation.animateTo(1f, PressSpring) }
+                    launch { positionAnimation.snapTo(startPosition) }
+                }
+            },
+            onDragEnd = { release() },
+            onDragCancel = { release() },
+        ) { change, _ ->
+            scope.launch { positionAnimation.snapTo(change.position) }
+        }
+    }
+
+    private fun release() {
+        scope.launch {
+            launch { pressProgressAnimation.animateTo(0f, PressSpring) }
+            launch { positionAnimation.animateTo(startPosition, PositionSpring) }
+        }
+    }
+
+    private companion object {
+        val PressSpring = spring<Float>(0.5f, 300f, 0.001f)
+        val PositionSpring = spring(0.5f, 300f, Offset.VisibilityThreshold)
+    }
+}
+
+/** 记录按压状态；[position] 用于让高光点跟随拖动/选中位置。[enabled] 为 false 时不响应按压。 */
+@Composable
+fun rememberAquariusPressState(
+    enabled: Boolean = true,
+    position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset },
+): AquariusPressState {
+    val scope = rememberCoroutineScope()
+    val currentPosition = rememberUpdatedState(position)
+    return remember(scope, enabled) {
+        AquariusPressState(scope, enabled) { size, offset -> currentPosition.value(size, offset) }
+    }
+}
+
+/** 组合「玻璃表面 + 按压高光 + 按压缩放」的标准修饰符链。 */
+@Composable
+fun Modifier.aquariusLiquidInteractive(
+    shape: Shape,
+    press: AquariusPressState,
+    tier: AquariusGlassTier = AquariusGlassTier.Pill,
+    backdrop: Backdrop = LocalAquariusGlassBackdrop.current,
+    surfaceColor: Color = aquariusGlassSurfaceColor(tier),
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    shadow: Shadow? = null,
+): Modifier {
+    val grow = dimensionResource(R.dimen.aquarius_liquid_press_grow)
+    return this
+        .aquariusLiquidGlass(
+            shape = shape,
+            tier = tier,
+            backdrop = backdrop,
+            surfaceColor = surfaceColor,
+            selected = selected,
+            shadow = shadow,
+            layerBlock = {
+                val progress = if (enabled) press.pressProgress else 0f
+                val scale = 1f + grow.toPx() / size.height.coerceAtLeast(1f) * progress
+                val maxOffset = size.minDimension
+                val offset = if (enabled) press.offset else Offset.Zero
+                translationX = maxOffset * kotlin.math.tanh(0.05f * offset.x / maxOffset)
+                translationY = maxOffset * kotlin.math.tanh(0.05f * offset.y / maxOffset)
+                // 对齐参考 LiquidButton：按拖拽角度的非对称挤压——沿拖拽方向拉伸、
+                // 垂直方向收窄，产生「液态拉扯」形变（角度由拖拽 offset 决定）。
+                val maxDragScale = grow.toPx() / size.height.coerceAtLeast(1f)
+                val offsetAngle = atan2(offset.y, offset.x)
+                scaleX = scale +
+                    maxDragScale * abs(cos(offsetAngle) * offset.x / size.maxDimension) *
+                    (size.width / size.height).fastCoerceAtMost(1f)
+                scaleY = scale +
+                    maxDragScale * abs(sin(offsetAngle) * offset.y / size.maxDimension) *
+                    (size.height / size.width).fastCoerceAtMost(1f)
+            },
+        )
+        // 按压高光（press.highlightModifier）自带 shape 裁剪；此处 clip(shape) 再兜一层。
+        .clip(shape)
+        .then(if (enabled) press.highlightModifier(shape) else Modifier)
+        .then(if (enabled) press.gestureModifier else Modifier)
+}

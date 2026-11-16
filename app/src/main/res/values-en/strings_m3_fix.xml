@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English UI strings (terse). Mirrors values/strings_m3_fix.xml. -->
+<resources>
+    <string name="m3t_sidebar_subtitle">Phone assistant</string>
+    <string name="m3t_sidebar_api_config">API</string>
+    <string name="m3t_sidebar_api_hint">API key</string>
+    <string name="m3t_sidebar_api_paste">Paste</string>
+    <string name="m3t_sidebar_third_party_api">OpenAI-compatible API</string>
+    <string name="m3t_sidebar_get_api_key">Get key &gt;</string>
+    <string name="m3t_sidebar_check_connection">Test</string>
+    <string name="m3t_sidebar_api_not_checked">Not tested</string>
+    <string name="m3t_sidebar_local_model_mode">Use local model</string>
+    <string name="m3t_sidebar_local_model_switch_to_qwen">Switched to local Qwen3.5-9B</string>
+    <string name="m3t_sidebar_local_model_not_ready">Local model not ready. Download it first.</string>
+    <string name="m3t_sidebar_local_model_downloading">Downloading local model…</string>
+    <string name="m3t_sidebar_local_model_ready">Local model ready</string>
+    <string name="m3t_sidebar_local_model_route_hint">Local mode needs your own OpenAI-compatible base URL. The Zhipu default is still set — turn off local mode and configure it under OpenAI-compatible.</string>
+    <string name="m3t_sidebar_qwen_download">Download model</string>
+    <string name="m3t_sidebar_qwen_download_ready">Model downloaded</string>
+    <string name="m3t_sidebar_qwen_download_preparing">Preparing…</string>
+    <string name="m3t_sidebar_qwen_download_enqueued">Queued. Downloading in background.</string>
+    <string name="m3t_sidebar_qwen_download_cached">Model files already present</string>
+    <string name="m3t_sidebar_qwen_download_summary_format">Queued %1$d files (%2$d skipped) to %3$s</string>
+    <string name="m3t_sidebar_qwen_download_failed_format">Download failed: %1$s</string>
+    <string name="m3t_sidebar_qwen_download_complete">Qwen3.5-9B downloaded. Local model ready.</string>
+    <string name="m3t_sidebar_qwen_download_failed_reason_format">Download failed (reason=%1$d)</string>
+    <string name="m3t_nav_automation">Automation</string>
+    <string name="m3t_nav_about">About</string>
+    <string name="m3t_updates_title">Changelog</string>
+    <string name="m3t_updates_include_prerelease">Include pre-releases</string>
+    <string name="m3t_updates_load_more">Load more</string>
+    <string name="m3t_updates_no_more">End of list</string>
+    <string name="m3t_updates_retry">Retry</string>
+    <string name="m3t_updates_history_tip">Older versions below</string>
+    <string name="m3t_updates_no_changelog">(No notes)</string>
+    <string name="m3t_updates_open_release">Open release</string>
+    <string name="m3t_updates_close">Close</string>
+    <string name="m3t_updates_choose_source">Choose source</string>
+    <string name="m3t_updates_found">New version</string>
+    <string name="m3t_updates_repo_subtitle">%1$s/%2$s · %3$s</string>
+    <string name="m3t_updates_view_release">View release</string>
+    <string name="m3t_updates_history">History</string>
+    <string name="m3t_updates_details">Details</string>
+    <string name="m3t_updates_view">View</string>
+    <string name="m3t_updates_download">Download</string>
+    <string name="m3t_updates_prerelease">Pre-release</string>
+    <string name="m3t_license_title">Open source licenses</string>
+    <string name="m3t_license_format">License: %1$s</string>
+    <string name="m3t_action_cancel">Cancel</string>
+</resources>

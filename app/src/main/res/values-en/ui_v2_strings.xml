@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English UI strings (terse). Mirrors values/ui_v2_strings.xml. -->
+<resources>
+    <string name="ui_v2_background">Background</string>
+    <string name="ui_v2_foreground">Foreground</string>
+    <string name="ui_v2_background_hint">Runs in a virtual display</string>
+    <string name="ui_v2_foreground_hint">Runs on this screen</string>
+    <string name="ui_v2_agent_on">Task mode · on</string>
+    <string name="ui_v2_agent_off">Task mode</string>
+    <string name="ui_v2_welcome">Hi, I\'m Aquarius</string>
+    <string name="ui_v2_welcome_subtitle">Your phone assistant. Any idea, acted on.</string>
+    <string name="ui_v2_welcome_chat">Chat anytime</string>
+    <string name="ui_v2_welcome_automation">Tasks across apps</string>
+    <string name="ui_v2_welcome_control">Visible progress, pause anytime</string>
+    <string name="ui_v2_back">Back</string>
+    <string name="ui_v2_history">History</string>
+    <string name="ui_v2_home">Home</string>
+    <string name="ui_v2_more">More</string>
+    <string name="ui_v2_hero">Hand it to Aquarius</string>
+    <string name="ui_v2_subtitle">Tell me what to do. I\'ll run your phone.</string>
+    <string name="ui_v2_try">Try</string>
+    <string name="ui_v2_message_style">Message style</string>
+    <string name="ui_v2_bubble">Bubbles</string>
+    <string name="ui_v2_plain">Plain</string>
+    <string name="ui_v2_account">Aquarius account</string>
+    <string name="ui_v2_account_hint">Account and models</string>
+    <string name="ui_v2_task_details">Task details</string>
+    <string name="ui_v2_task_result">Result</string>
+    <string name="ui_v2_unavailable">Full record unavailable</string>
+    <string name="ui_v2_running">Running</string>
+    <string name="ui_v2_pause_requested">Finishing current step</string>
+    <string name="ui_v2_paused">Paused</string>
+    <string name="ui_v2_success">Completed</string>
+    <string name="ui_v2_failed">Not completed</string>
+    <string name="ui_v2_cancelled">Cancelled</string>
+    <string name="ui_v2_pause">Pause</string>
+    <string name="ui_v2_resume">Resume</string>
+    <string name="ui_v2_stop">Stop task</string>
+    <string name="ui_v2_logs">Log</string>
+    <string name="ui_v2_copy_logs">Copy log</string>
+    <string name="ui_v2_details">Details</string>
+    <string name="ui_v2_no_logs">No log yet</string>
+    <string name="ui_v2_auto_confirm_note">Normal tasks run on a timer; sensitive actions need you.</string>
+    <string name="ui_v2_started_at">Started: %1$s</string>
+    <string name="ui_v2_actual_steps">%1$d steps run</string>
+    <string name="ui_v2_new_task">New task</string>
+    <string name="ui_v2_background_execution">Background virtual display</string>
+    <string name="ui_v2_shizuku_execution">Prefer Shizuku</string>
+    <string name="ui_v2_auto_confirmation">Auto-confirm normal tasks</string>
+    <string name="ui_v2_avatar">A</string>
+    <string name="ui_v2_model_title">Model &amp; API</string>
+    <string name="ui_v2_about_title">About</string>
+    <string name="ui_v2_about_hint">Privacy, safety and help</string>
+    <string name="ui_v2_quick_settings">Automation</string>
+    <string name="ui_v2_quick_settings_hint">Common controls. Full logs live in the automation panel.</string>
+    <string name="ui_v2_open_control">Open automation panel</string>
+    <string name="ui_v2_confirm_enabled">On · sensitive actions still ask</string>
+    <string name="ui_v2_confirm_disabled">Off · confirm every run</string>
+    <string name="ui_v2_font_and_size">Font and size</string>
+    <string name="ui_v2_thinking_process">Reasoning</string>
+    <string name="ui_v2_expanded">Expanded</string>
+    <string name="ui_v2_collapsed">Collapsed</string>
+    <string name="ui_v2_code_options">Code block display</string>
+    <string name="ui_v2_goal">Goal</string>
+    <string name="ui_v2_execution_steps">Progress</string>
+    <string name="ui_v2_next_task_hint">Describe the next task</string>
+    <string name="ui_v2_welcome_note">Every step reports status. Anything risky asks first.</string>
+    <string name="ui_v2_agreement_checked">I have read and understood the above</string>
+    <string name="ui_v2_agreement_full">Read full terms</string>
+    <string name="ui_v2_welcome_heading">Complex tasks, handled</string>
+    <string name="ui_v2_welcome_description">You give the goal. I understand, confirm and operate your phone — visibly.</string>
+    <string name="ui_v2_step_caption">Step %1$d of 3</string>
+    <string name="ui_v2_agreement_heading">How Aquarius works</string>
+    <string name="ui_v2_agreement_description">Aquarius reads your instruction, may open other apps, read screen content and act.</string>
+    <string name="ui_v2_agreement_rules">Usage rules and automation limits</string>
+    <string name="ui_v2_privacy_title">Privacy</string>
+    <string name="ui_v2_privacy_description">Permissions and data handling in the full terms</string>
+    <string name="ui_v2_ai_content">AI content</string>
+    <string name="ui_v2_ai_content_description">AI output can be wrong. Important actions ask first.</string>
+    <string name="ui_v2_permission_heading">Let Aquarius run your phone</string>
+    <string name="ui_v2_permission_description">Grant the required permissions. You can change them later.</string>
+    <string name="ui_v2_camera_failed">Cannot start camera</string>
+    <string name="ui_v2_attachment_camera">Camera</string>
+    <string name="ui_v2_attachment_gallery">Gallery</string>
+    <string name="ui_v2_attachment_file">File</string>
+    <string name="ui_v2_attachment_count">Attachments (%1$d)</string>
+    <string name="ui_v2_attachment_remove">Remove</string>
+    <string name="ui_v2_setup_incomplete">Incomplete</string>
+    <string name="ui_v2_not_connected">Offline</string>
+    <string name="ui_v2_show_task_logs">Show log (%1$d)</string>
+    <string name="ui_v2_hide_task_logs">Hide log</string>
+    <string name="ui_v2_overlay_running">Running</string>
+    <string name="ui_v2_overlay_waiting_model">Waiting for model…</string>
+    <string name="ui_v2_overlay_paused_hint">Paused · tap to view</string>
+    <string name="ui_v2_overlay_header_format">%1$s %2$s</string>
+    <string name="ui_v2_overlay_idle">Idle · waiting for a task</string>
+    <string name="ui_v2_overlay_finished">Finished · ready for a new task</string>
+    <string name="ui_v2_overlay_no_running_task">No task running</string>
+    <string name="ui_v2_overlay_task_busy">A task is running. Stop it first.</string>
+    <string name="ui_v2_overlay_need_main">Open Aquarius AI first</string>
+    <string name="ui_v2_overlay_new_task_symbol">＋</string>
+    <string name="ui_v2_overlay_new_task_hint">New task…</string>
+    <string name="ui_v2_overlay_new_task_send">Send</string>
+    <string name="ui_v2_overlay_end_task">End task</string>
+    <string name="ui_v2_overlay_hide">Hide</string>
+    <string name="ui_v2_overlay_show">Show</string>
+
+    <string-array name="ui_v2_suggestions">
+        <item>Open Chaoxing and finish the quiz</item>
+        <item>Screenshot and summarize this page</item>
+        <item>Set an alarm for 8am tomorrow</item>
+        <item>Book a train ticket to Shanghai tomorrow</item>
+    </string-array>
+</resources>
