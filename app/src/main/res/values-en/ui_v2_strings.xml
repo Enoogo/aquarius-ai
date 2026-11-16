@@ -51,8 +51,6 @@
     <string name="ui_v2_model_title">Model &amp; API</string>
     <string name="ui_v2_about_title">About</string>
     <string name="ui_v2_about_hint">Privacy, safety and help</string>
-    <string name="ui_v2_quick_settings">Automation</string>
-    <string name="ui_v2_quick_settings_hint">Common controls. Full logs live in the automation panel.</string>
     <string name="ui_v2_open_control">Open automation panel</string>
     <string name="ui_v2_confirm_enabled">On · sensitive actions still ask</string>
     <string name="ui_v2_confirm_disabled">Off · confirm every run</string>
@@ -111,4 +109,29 @@
         <item>Set an alarm for 8am tomorrow</item>
         <item>Book a train ticket to Shanghai tomorrow</item>
     </string-array>
+
+    <!-- Storage (screenshot archive) -->
+    <string name="settings_section_storage">Storage</string>
+    <string name="settings_section_storage_hint">Review what the AI saw, and pick where it lives</string>
+    <string name="storage_location_title">Storage location</string>
+    <string name="storage_location_hint">Only affects new screenshots; existing images stay where they are</string>
+    <string name="storage_location_app">Inside the app</string>
+    <string name="storage_location_app_desc">Private to this app, keeps the latest 200 shots</string>
+    <string name="storage_location_album">Phone folder</string>
+    <string name="storage_location_album_desc">Saved to %1$s, readable by any gallery app</string>
+    <string name="storage_location_custom">Custom folder</string>
+    <string name="storage_location_custom_desc">Pick any folder for screenshots; the system file picker grants access once</string>
+    <string name="storage_location_custom_unset">No folder selected yet</string>
+    <string name="storage_location_custom_missing">The selected folder is unavailable. Pick it again.</string>
+    <string name="storage_location_custom_pick">Choose folder</string>
+    <string name="storage_location_custom_change">Change folder</string>
+    <string name="storage_summary">%1$d shots · %2$s</string>
+    <string name="storage_summary_hint">Every frame sent to the model is kept here — inspect or clear them anytime</string>
+    <string name="storage_clear_all">Clear all</string>
+    <string name="storage_empty">No screenshots yet. Run a task and every frame the AI saw shows up here.</string>
+    <string name="storage_clear_confirm_title">Clear all screenshots?</string>
+    <string name="storage_clear_confirm_message">Both in-app and gallery shots will be deleted. This cannot be undone.</string>
+    <string name="storage_preview_step">Step %1$d screenshot</string>
+    <string name="storage_delete">Delete this shot</string>
+    <string name="task_log_shots_title">Screenshots from this run (%1$d)</string>
 </resources>

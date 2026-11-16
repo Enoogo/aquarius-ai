@@ -62,6 +62,13 @@ class AutomationOverlay(
     private var hiddenTagParams: WindowManager.LayoutParams? = null
     private var userHidden = false
 
+    // “隐藏/显示”回到原位用的锚点：隐藏那一刻“隐藏”两字中心相对窗口左上角的偏移。
+    private var hideAnchorOffsetX = 0
+    private var hideAnchorOffsetY = 0
+
+    /** 用户此刻是否处于“隐藏”态（窗口收起、只留“显示”小字）。 */
+    fun isUserHidden(): Boolean = userHidden
+
     private var maxSteps: Int = 1
     private var launchMainOnClick: Boolean = false
     
@@ -187,21 +194,49 @@ class AutomationOverlay(
         val baseX = (dm.widthPixels - overlayW - DisplayUtils.dp(appCtx, 10)).coerceAtLeast(0)
         val baseY = DisplayUtils.dp(appCtx, 76).coerceAtLeast(0)
 
+        // 位置/尺寸记忆：优先恢复上次的框架（含用户拖动、四角缩放、“显示”拖动回推的结果），
+        // 屏幕尺寸变化（旋转、换屏）后统一回归默认位置并夹取到当前屏幕内。
+        val saved = AppUiPrefs.overlayFrame(appCtx)
+        val frameW =
+                saved?.let {
+                    it.width.coerceIn(
+                            DisplayUtils.dp(appCtx, 150),
+                            dm.widthPixels.coerceAtMost(DisplayUtils.dp(appCtx, 2000))
+                    )
+                } ?: overlayW
+        val frameH =
+                saved?.let {
+                    it.height.coerceIn(
+                            DisplayUtils.dp(appCtx, 110),
+                            dm.heightPixels.coerceAtMost(DisplayUtils.dp(appCtx, 3000))
+                    )
+                } ?: overlayH
+        val screenChanged =
+                saved != null &&
+                        saved.screenWidth > 0 &&
+                        (saved.screenWidth != dm.widthPixels || saved.screenHeight != dm.heightPixels)
+        val startX =
+                if (saved == null || screenChanged) baseX
+                else saved.x.coerceIn(0, (dm.widthPixels - frameW).coerceAtLeast(0))
+        val startY =
+                if (saved == null || screenChanged) baseY
+                else saved.y.coerceIn(0, (dm.heightPixels - frameH).coerceAtLeast(0))
+
         val typeCandidates = DisplayUtils.getOverlayTypeCandidates()
 
         var lastError: Throwable? = null
         for (type in typeCandidates.distinct()) {
             val lp =
                     WindowManager.LayoutParams(
-                            overlayW,
-                            overlayH,
+                            frameW,
+                            frameH,
                             type,
                             flags,
                             android.graphics.PixelFormat.TRANSLUCENT
                     )
             lp.gravity = Gravity.TOP or Gravity.START
-            lp.x = baseX
-            lp.y = baseY
+            lp.x = startX
+            lp.y = startY
 
             view.attachWindowManager(w, lp)
             val ok =
@@ -209,15 +244,16 @@ class AutomationOverlay(
                                 w.addView(view, lp)
                                 true
                             }
-                            .getOrElse {
-                                lastError = it
-                                false
-                            }
+                    .getOrElse {
+                        lastError = it
+                        false
+                    }
             if (ok) {
                 wm = w
                 container = view
                 view.startSpinner()
                 _visible.value = true
+                AppUiPrefs.setOverlayFrame(appCtx, startX, startY, frameW, frameH)
                 return true
             }
         }
@@ -238,20 +274,29 @@ class AutomationOverlay(
         return false
     }
 
-    /** 窗口真正挂在 WindowManager 上才算显示；用户点“隐藏”后只剩“显示”文字，视为未显示。 */
     /** 设置里改了悬浮窗字号或颗粒开关后调用，已显示的窗口立即生效。 */
     fun refreshAppearance() {
         runOnMain { container?.applyAppearancePrefs() }
     }
 
+    /** 主窗是否真的挂在 WindowManager 上（用户点了“隐藏”时为 false，只剩“显示”小字）。 */
     fun isShowing(): Boolean = container != null && wm != null && !userHidden
+
+    /** 悬浮窗功能是否处于“开启”状态：隐藏态仍然算开启，因为它还在屏幕上。 */
+    fun isOverlayEnabled(): Boolean = container != null && wm != null
 
     /**
      * 设置里打开“悬浮窗开关”时显示窗口：
-     * 有任务在跑就按执行态显示，空闲时显示待机文案。
+     * 有任务在跑就按执行态显示，空闲时显示待机文案；
+     * 如果用户之前只是点了“隐藏”，这一步等价于点“显示”（窗口仍在，只恢复显示）。
      */
     fun showIdle(context: Context, taskActive: Boolean = false): Boolean {
         if (isShowing()) {
+            _visible.value = true
+            return true
+        }
+        if (userHidden && container != null && wm != null) {
+            setUserHidden(false)
             _visible.value = true
             return true
         }
@@ -643,6 +688,8 @@ class AutomationOverlay(
         hiddenTagView = null
         hiddenTagParams = null
         userHidden = false
+        hideAnchorOffsetX = 0
+        hideAnchorOffsetY = 0
         launchMainOnClick = false
         inputVerifyHighlightActive = false
         taskRunning = false
@@ -657,8 +704,11 @@ class AutomationOverlay(
     }
 
     /**
-     * 用户点“隐藏”后移除内容窗，只留一个可拖动的“显示”文字；
-     * 再点“显示”恢复内容窗（尺寸/位置保持隐藏前的状态）。
+     * 用户点“隐藏”后移除内容窗，只留一个可拖动的“显示”文字，且“显示”出现在刚刚“隐藏”
+     * 两个字所在的位置；再点“显示”时反过来用拖动后的位置回推整个窗口，让“隐藏”继续停在
+     * 用户最后放下的地方。
+     *
+     * 注意：这里**不**改动 [_visible]——“隐藏”只是把内容窗收起来，悬浮窗功能仍然是开着的。
      */
     fun setUserHidden(hidden: Boolean) {
         val w = wm ?: return
@@ -668,16 +718,41 @@ class AutomationOverlay(
         // 延后一帧：按钮/文字的 UP 事件仍在分发中，立即 removeView 会被系统拒绝。
         mainHandler.post {
             if (hidden) {
+                val params = v.windowParams()
+                // 记录“隐藏”两字中心相对窗口左上角的偏移，供“显示”回到原位、以及反算窗口坐标。
+                val anchor = v.hideAnchorCenter()
+                hideAnchorOffsetX = anchor?.first ?: ((params?.width ?: v.width) - dpPx(v.context, 28))
+                hideAnchorOffsetY = anchor?.second ?: ((params?.height ?: v.height) - dpPx(v.context, 14))
+                val centerX = (params?.x ?: 0) + hideAnchorOffsetX
+                val centerY = (params?.y ?: 0) + hideAnchorOffsetY
                 runCatching { w.removeView(v) }
-                showHiddenTag(w)
-                _visible.value = false
+                showHiddenTag(w, centerX, centerY)
             } else {
+                val tagParams = hiddenTagParams
                 removeHiddenTag(w)
                 val params = v.windowParams() ?: return@post
+                if (tagParams != null) {
+                    val dm = v.resources.displayMetrics
+                    // “显示”被拖动过就以它当前位置为准：整窗平移，使“隐藏”落回原处。
+                    val targetX =
+                            tagParams.x + tagParams.width / 2 - hideAnchorOffsetX
+                    val targetY =
+                            tagParams.y + tagParams.height / 2 - hideAnchorOffsetY
+                    params.x =
+                            targetX.coerceIn(0, (dm.widthPixels - params.width).coerceAtLeast(0))
+                    params.y =
+                            targetY.coerceIn(0, (dm.heightPixels - params.height).coerceAtLeast(0))
+                }
                 runCatching {
                     w.addView(v, params)
                     v.startSpinner()
-                    _visible.value = true
+                    AppUiPrefs.setOverlayFrame(
+                            v.context,
+                            params.x,
+                            params.y,
+                            params.width,
+                            params.height,
+                    )
                 }
             }
         }
@@ -686,7 +761,7 @@ class AutomationOverlay(
     // 这是悬浮的小标签，拖动与点击共用一套触摸处理，语义上不是普通按钮；
     // performClick 已在下方内部覆写，这里只是让 lint 不再要求额外的 OnClickListener。
     @SuppressLint("ClickableViewAccessibility")
-    private fun showHiddenTag(w: WindowManager) {
+    private fun showHiddenTag(w: WindowManager, centerX: Int, centerY: Int) {
         if (hiddenTagView != null) return
         val ctx = overlayContext ?: return
         // 用匿名子类覆写 performClick，满足无障碍对自定义触摸视图的要求。
@@ -724,8 +799,11 @@ class AutomationOverlay(
                         android.graphics.PixelFormat.TRANSLUCENT
                 )
         params.gravity = Gravity.TOP or Gravity.START
-        params.x = (dm.widthPixels - dpPx(ctx, 54)).coerceAtLeast(0)
-        params.y = (dm.heightPixels / 2).coerceAtLeast(0)
+        // 文字宽度要等测量后才知道，先用“隐藏”按钮的尺寸估算，保证“显示”落点与“隐藏”重合。
+        val approxW = dpPx(ctx, 28) + dpPx(ctx, 20)
+        val approxH = dpPx(ctx, 16) + dpPx(ctx, 12)
+        params.x = (centerX - approxW / 2).coerceIn(0, (dm.widthPixels - approxW).coerceAtLeast(0))
+        params.y = (centerY - approxH / 2).coerceIn(0, (dm.heightPixels - approxH).coerceAtLeast(0))
 
         var downRawX = 0f
         var downRawY = 0f
@@ -764,6 +842,7 @@ class AutomationOverlay(
                     if (!moved) {
                         // 无障碍要求：识别到点击时回调 performClick。
                         view.performClick()
+                        Haptics.tap(ctx)
                         setUserHidden(false)
                     }
                     true
@@ -1118,6 +1197,33 @@ class AutomationOverlay(
 
         fun windowParams(): WindowManager.LayoutParams? = lp
 
+        /**
+         * “隐藏”两字中心在本窗口内的偏移量。
+         *
+         * 收起窗口时用它把“显示”摆到“隐藏”刚才所在的位置；恢复窗口时再用同一个偏移反算
+         * 窗口坐标，从而做到「“显示”被拖到哪，“隐藏”就回到哪」。
+         */
+        fun hideAnchorCenter(): Pair<Int, Int>? {
+            if (hideAction.width <= 0 || hideAction.height <= 0) return null
+            val anchor = IntArray(2)
+            val origin = IntArray(2)
+            hideAction.getLocationOnScreen(anchor)
+            getLocationOnScreen(origin)
+            val localX = anchor[0] - origin[0] + hideAction.width / 2
+            val localY = anchor[1] - origin[1] + hideAction.height / 2
+            if (localX < 0 || localY < 0) return null
+            return localX to localY
+        }
+
+        /** 把当前窗口位置/尺寸写进偏好，下次打开时原样恢复。 */
+        fun persistFrame() {
+            val p = lp ?: return
+            val viewW = if (p.width > 0) p.width else width
+            val viewH = if (p.height > 0) p.height else height
+            if (viewW <= 0 || viewH <= 0) return
+            AppUiPrefs.setOverlayFrame(context, p.x, p.y, viewW, viewH)
+        }
+
         fun currentStep(): Int = stepValue
 
         fun setTexts(t: String, s: String, detailText: String? = null) {
@@ -1213,6 +1319,7 @@ class AutomationOverlay(
                         params.y = (dm.heightPixels * 0.04f).toInt().coerceAtLeast(0)
                     }
                     runCatching { manager.updateViewLayout(this, params) }
+                    persistFrame()
                 }
                 // 等窗口参数生效后再要焦点，否则 IME 拿不到可聚焦窗口。
                 postDelayed(
@@ -1434,6 +1541,8 @@ class AutomationOverlay(
                     if (resizing) {
                         resizing = false
                         resizeCorner = 0
+                        // 缩放结束即记下尺寸与位置，下次打开沿用。
+                        persistFrame()
                         return true
                     }
                 }
@@ -1537,12 +1646,15 @@ class AutomationOverlay(
                 }
                 MotionEvent.ACTION_UP -> {
                     return if (dragging) {
+                        // 拖动结束记下位置，关闭/重开后仍回到这里。
+                        persistFrame()
                         true
                     } else {
                         performClick()
                     }
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    if (dragging) persistFrame()
                     dragging = false
                     return true
                 }

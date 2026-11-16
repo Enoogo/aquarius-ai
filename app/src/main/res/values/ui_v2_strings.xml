@@ -58,8 +58,6 @@
 <string name="ui_v2_model_title">模型与 API</string>
 <string name="ui_v2_about_title">关于与帮助</string>
 <string name="ui_v2_about_hint">隐私、安全与使用说明</string>
-<string name="ui_v2_quick_settings">自动化快速设置</string>
-<string name="ui_v2_quick_settings_hint">常用控制集中在这里，详细日志仍在自动化控制中心查看。</string>
 <string name="ui_v2_open_control">打开自动化控制中心</string>
 <string name="ui_v2_confirm_enabled">已开启 · 敏感操作仍需确认</string>
 <string name="ui_v2_confirm_disabled">已关闭 · 每次执行前确认</string>
@@ -111,4 +109,29 @@
     <string name="ui_v2_overlay_end_task">结束任务</string>
     <string name="ui_v2_overlay_hide">隐藏</string>
     <string name="ui_v2_overlay_show">显示</string>
+
+    <!-- 存储（截图存档） -->
+    <string name="settings_section_storage">存储</string>
+    <string name="settings_section_storage_hint">查看 AI 收到的截图，并选择存在哪里</string>
+    <string name="storage_location_title">存储位置</string>
+    <string name="storage_location_hint">切换后只影响新产生的截图，已有图片不会被移动</string>
+    <string name="storage_location_app">应用内部</string>
+    <string name="storage_location_app_desc">仅本应用可见，自动保留最近 200 张</string>
+    <string name="storage_location_album">手机本地文件夹</string>
+    <string name="storage_location_album_desc">写入相册目录 %1$s，可用任意图库应用打开</string>
+    <string name="storage_location_custom">自定义文件夹</string>
+    <string name="storage_location_custom_desc">自己指定任意文件夹存放截图，首次选择时由系统文件选择器授权</string>
+    <string name="storage_location_custom_unset">尚未选择文件夹</string>
+    <string name="storage_location_custom_missing">已选择的文件夹不可用，请重新选择</string>
+    <string name="storage_location_custom_pick">选择文件夹</string>
+    <string name="storage_location_custom_change">更换文件夹</string>
+    <string name="storage_summary">%1$d 张 · %2$s</string>
+    <string name="storage_summary_hint">任务每一步发给模型的画面都会存在这里，可逐张查看或清理</string>
+    <string name="storage_clear_all">全部清理</string>
+    <string name="storage_empty">还没有截图。执行一次任务后，AI 看到的画面会自动出现在这里。</string>
+    <string name="storage_clear_confirm_title">清理全部截图？</string>
+    <string name="storage_clear_confirm_message">应用内部与相册里的存档都会被删除，此操作不可恢复。</string>
+    <string name="storage_preview_step">第 %1$d 步截图</string>
+    <string name="storage_delete">删除这张</string>
+    <string name="task_log_shots_title">本次任务的截图（%1$d 张）</string>
 </resources>

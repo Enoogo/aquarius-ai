@@ -2,6 +2,7 @@ package com.ai.phoneagent.core.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.TypedValue
 import androidx.core.content.edit
 
@@ -27,6 +28,23 @@ object AppUiPrefs {
     private const val KEY_HIDE_SIZE_SP = "overlay_hide_size_sp"
     private const val KEY_PLUS_SIZE_SP = "overlay_plus_size_sp"
     private const val KEY_LANGUAGE_TAG = "language_tag"
+    private const val KEY_OVERLAY_X = "overlay_frame_x"
+    private const val KEY_OVERLAY_Y = "overlay_frame_y"
+    private const val KEY_OVERLAY_W = "overlay_frame_w"
+    private const val KEY_OVERLAY_H = "overlay_frame_h"
+    private const val KEY_OVERLAY_SCREEN_W = "overlay_frame_screen_w"
+    private const val KEY_OVERLAY_SCREEN_H = "overlay_frame_screen_h"
+    private const val KEY_SCREENSHOT_STORAGE = "screenshot_storage_mode"
+    private const val KEY_SCREENSHOT_TREE_URI = "screenshot_storage_tree_uri"
+
+    /** 截图存储位置：应用内部（默认）。 */
+    const val SCREENSHOT_STORAGE_APP = "app"
+
+    /** 截图存储位置：手机本地相册文件夹（Pictures/AquariusAI）。 */
+    const val SCREENSHOT_STORAGE_ALBUM = "album"
+
+    /** 截图存储位置：用户自己用系统文件选择器指定的任意文件夹（SAF 目录树）。 */
+    const val SCREENSHOT_STORAGE_CUSTOM = "custom"
 
     /** 语言：简体中文（默认）。 */
     const val LANGUAGE_ZH = "zh"
@@ -78,6 +96,87 @@ object AppUiPrefs {
 
     fun setOverlayEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit { putBoolean(KEY_OVERLAY_ENABLED, enabled) }
+    }
+
+    /**
+     * 悬浮窗上次的位置与尺寸（像素，相对屏幕左上角）。
+     *
+     * 关闭悬浮窗、退出应用、甚至进程被杀之后再次打开，都按这个位置摆放，
+     * 不再每次都跳回右上角。记录时一并保存当时的屏幕尺寸，旋转/换屏后用于判断是否需要重新夹取。
+     */
+    data class OverlayFrame(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val screenWidth: Int,
+        val screenHeight: Int,
+    )
+
+    /** 读取上次保存的悬浮窗框架；从未保存过或数据非法时返回 null。 */
+    fun overlayFrame(context: Context): OverlayFrame? {
+        val p = prefs(context)
+        val w = p.getInt(KEY_OVERLAY_W, 0)
+        val h = p.getInt(KEY_OVERLAY_H, 0)
+        if (w <= 0 || h <= 0) return null
+        val x = p.getInt(KEY_OVERLAY_X, 0)
+        val y = p.getInt(KEY_OVERLAY_Y, 0)
+        if (x < 0 || y < 0) return null
+        return OverlayFrame(
+            x = x,
+            y = y,
+            width = w,
+            height = h,
+            screenWidth = p.getInt(KEY_OVERLAY_SCREEN_W, 0),
+            screenHeight = p.getInt(KEY_OVERLAY_SCREEN_H, 0),
+        )
+    }
+
+    fun setOverlayFrame(context: Context, x: Int, y: Int, width: Int, height: Int) {
+        val dm = context.resources.displayMetrics
+        prefs(context).edit {
+            putInt(KEY_OVERLAY_X, x.coerceAtLeast(0))
+            putInt(KEY_OVERLAY_Y, y.coerceAtLeast(0))
+            putInt(KEY_OVERLAY_W, width.coerceAtLeast(0))
+            putInt(KEY_OVERLAY_H, height.coerceAtLeast(0))
+            putInt(KEY_OVERLAY_SCREEN_W, dm.widthPixels)
+            putInt(KEY_OVERLAY_SCREEN_H, dm.heightPixels)
+        }
+    }
+
+    /** 截图存放位置：[SCREENSHOT_STORAGE_APP]、[SCREENSHOT_STORAGE_ALBUM] 或 [SCREENSHOT_STORAGE_CUSTOM]。 */
+    fun screenshotStorageMode(context: Context): String {
+        val stored = prefs(context).getString(KEY_SCREENSHOT_STORAGE, SCREENSHOT_STORAGE_APP)
+        return when (stored) {
+            SCREENSHOT_STORAGE_ALBUM -> SCREENSHOT_STORAGE_ALBUM
+            // 自定义目录必须有一次已授权的目录树；授权丢了（用户删目录、清授权、换机恢复）
+            // 就自动退回应用内部，避免后台任务因为写不进去而丢截图。
+            SCREENSHOT_STORAGE_CUSTOM ->
+                if (screenshotStorageTreeUri(context) != null) SCREENSHOT_STORAGE_CUSTOM else SCREENSHOT_STORAGE_APP
+            else -> SCREENSHOT_STORAGE_APP
+        }
+    }
+
+    fun setScreenshotStorageMode(context: Context, mode: String) {
+        val safe =
+            when (mode) {
+                SCREENSHOT_STORAGE_ALBUM -> SCREENSHOT_STORAGE_ALBUM
+                SCREENSHOT_STORAGE_CUSTOM -> SCREENSHOT_STORAGE_CUSTOM
+                else -> SCREENSHOT_STORAGE_APP
+            }
+        prefs(context).edit { putString(KEY_SCREENSHOT_STORAGE, safe) }
+    }
+
+    /** 用户选定的自定义目录（SAF 目录树 Uri）；未选择过返回 null。 */
+    fun screenshotStorageTreeUri(context: Context): Uri? {
+        val raw = prefs(context).getString(KEY_SCREENSHOT_TREE_URI, null)?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching { Uri.parse(raw) }.getOrNull()
+    }
+
+    fun setScreenshotStorageTreeUri(context: Context, uri: Uri?) {
+        prefs(context).edit {
+            if (uri == null) remove(KEY_SCREENSHOT_TREE_URI) else putString(KEY_SCREENSHOT_TREE_URI, uri.toString())
+        }
     }
 
     /**

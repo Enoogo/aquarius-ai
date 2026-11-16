@@ -15,6 +15,7 @@
     <string name="about_source_code">Source code</string>
     <string name="about_source_code_short">GitHub</string>
     <string name="about_source_code_url">https://github.com/Enoogo/aquarius-ai</string>
+    <string name="about_github_url">https://github.com/Enoogo/</string>
     <string name="about_feedback">Task feedback</string>
     <string name="about_feedback_desc">Package and share redacted logs</string>
     <string name="about_feedback_confirm_title">Create log bundle</string>

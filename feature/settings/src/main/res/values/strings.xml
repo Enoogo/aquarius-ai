@@ -15,6 +15,7 @@
     <string name="about_source_code">Source Code</string>
     <string name="about_source_code_short">GitHub 仓库</string>
     <string name="about_source_code_url">https://github.com/Enoogo/aquarius-ai</string>
+    <string name="about_github_url">https://github.com/Enoogo/</string>
     <string name="about_feedback">任务反馈</string>
     <string name="about_feedback_desc">确认后打包并分享脱敏日志</string>
     <string name="about_feedback_confirm_title">打包日志包</string>

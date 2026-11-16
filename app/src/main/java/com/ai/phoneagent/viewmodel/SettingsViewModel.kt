@@ -9,6 +9,7 @@ import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ai.phoneagent.R
@@ -38,6 +39,7 @@ class SettingsViewModel(
         Appearance,
         Language,
         Overlay,
+        Storage,
         Automation,
         About,
     }
@@ -320,7 +322,7 @@ class SettingsViewModel(
             val intent =
                 Intent(
                     Intent.ACTION_VIEW,
-                    Uri.parse("https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys"),
+                    Uri.parse("https://platform.deepseek.com/api_keys"),
                 ).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
@@ -807,6 +809,32 @@ class SettingsViewModel(
         prefs.setUseAquariusApi(useAquariusApi)
     }
 
+    /**
+     * 按**应用内语言**解析资源。
+     *
+     * AppCompat 的 per-app Locale（`AppCompatDelegate.setApplicationLocales`）只把
+     * Configuration 注入到 Activity Context 上；ViewModel 拿到的 Application Context
+     * 仍是系统语言。之前这里直接 `getApplication().getString(...)`，于是英文界面里
+     * 「API 连接可用」这类由 ViewModel 产出的状态文案会退回中文。
+     */
     private fun stringRes(resId: Int, vararg args: Any): String =
-        getApplication<Application>().getString(resId, *args)
+        localizedResources().getString(resId, *args)
+
+    private fun localizedResources(): android.content.res.Resources {
+        val app = getApplication<Application>()
+        val locales = AppCompatDelegate.getApplicationLocales()
+        if (locales.isEmpty) return app.resources
+        val config = android.content.res.Configuration(app.resources.configuration)
+        config.setLocales(android.os.LocaleList.forLanguageTags(locales.toLanguageTags()))
+        return app.createConfigurationContext(config).resources
+    }
+
+    /**
+     * 语言切换后重新解析缓存在 ViewModel 里的界面文案（状态胶囊、下载按钮等）。
+     * 这些值只在状态变化时刷新，不重算就会一直停留在旧语言。
+     */
+    fun refreshLocalizedState() {
+        updateStatusText()
+        updateQwenDownloadButtonState()
+    }
 }

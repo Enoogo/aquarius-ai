@@ -85,6 +85,7 @@ fun AppearanceScreen(
     val codeAutoWrap by viewModel.codeAutoWrap.collectAsState()
     val codeLineNumbers by viewModel.codeLineNumbers.collectAsState()
     val codeAutoCollapse by viewModel.codeAutoCollapse.collectAsState()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsState()
 
     AppearanceScreenContent(
         onNavigateBack = onNavigateBack,
@@ -109,6 +110,8 @@ fun AppearanceScreen(
         onCodeLineNumbersChange = viewModel::setCodeLineNumbers,
         codeAutoCollapse = codeAutoCollapse,
         onCodeAutoCollapseChange = viewModel::setCodeAutoCollapse,
+        hapticsEnabled = hapticsEnabled,
+        onHapticsEnabledChange = viewModel::setHapticsEnabled,
     )
 }
 
@@ -137,6 +140,8 @@ fun AppearanceScreenContent(
     onThinkingExpandedChange: (Boolean) -> Unit = {},
     plainMessages: Boolean = false,
     onPlainMessagesChange: (Boolean) -> Unit = {},
+    hapticsEnabled: Boolean = true,
+    onHapticsEnabledChange: (Boolean) -> Unit = {},
 ) {
     val dark = themeMode == ThemeMode.DARK || (themeMode == ThemeMode.SYSTEM && isSystemInDarkTheme())
     var dialog by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
@@ -162,6 +167,20 @@ fun AppearanceScreenContent(
             item { AquariusSettingsSwitchItem(headlineText = stringResource(R.string.settings_appearance_code_line_numbers), checked = codeLineNumbers, onCheckedChange = onCodeLineNumbersChange) }
             item { AquariusSettingsSwitchItem(headlineText = stringResource(R.string.settings_appearance_code_auto_collapse), checked = codeAutoCollapse, onCheckedChange = onCodeAutoCollapseChange) }
             item { AquariusSettingsSwitchItem(headlineText = stringResource(R.string.settings_appearance_amoled), checked = amoledDarkEnabled, onCheckedChange = onAmoledDarkEnabledChange, enabled = dark) }
+            // 触感总开关：从设置首页移到这里，固定在本页最底部（代码块分组之后）。
+            item { AquariusSettingsSectionHeader(stringResource(R.string.settings_section_haptics)) }
+            item {
+                AquariusSettingsSwitchItem(
+                    headlineText = stringResource(R.string.settings_haptics_title),
+                    checked = hapticsEnabled,
+                    onCheckedChange = onHapticsEnabledChange,
+                    supportingText =
+                        stringResource(
+                            if (hapticsEnabled) R.string.settings_haptics_subtitle_on
+                            else R.string.settings_haptics_subtitle_off,
+                        ),
+                )
+            }
         }
     }
     if (dialog != null) androidx.compose.material3.AlertDialog(onDismissRequest = { dialog = null }, confirmButton = {

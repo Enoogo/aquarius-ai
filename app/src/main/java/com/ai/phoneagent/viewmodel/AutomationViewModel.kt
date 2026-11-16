@@ -983,6 +983,8 @@ class AutomationViewModel(
                             useThirdPartyApi = useThirdPartyApi,
                             task = task,
                             service = svc,
+                            // 截图存档按 runId 归属，历史日志里才能按任务找回全部图片。
+                            runId = mutableTask.value?.runId.orEmpty(),
                             control =
                                 object : UiAutomationAgent.Control {
                                     override fun isPaused(): Boolean = paused

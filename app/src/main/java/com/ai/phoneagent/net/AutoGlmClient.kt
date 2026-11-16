@@ -164,11 +164,17 @@ object AutoGlmClient {
                 val content: String? = null,
         )
 
-        const val DEFAULT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
-        const val DEFAULT_MODEL = "glm-4.6v-flash"
+        /**
+         * 默认接入：DeepSeek 官方 API（OpenAI 兼容协议）。
+         *
+         * 2.4.0 起把原来的默认智谱接入整体换成 DeepSeek，官方模式与第三方兼容模式共用这套默认值；
+         * 需要视觉能力的模型仍然可以在「OpenAI 兼容」里换成任意支持的端点与模型名。
+         */
+        const val DEFAULT_BASE_URL = "https://api.deepseek.com/v1/"
+        const val DEFAULT_MODEL = "deepseek-chat"
 
-        /** 手机自动化场景使用的模型标识（保留上游标识以对接服务端协议）。 */
-        const val PHONE_MODEL = "autoglm-phone"
+        /** 手机自动化场景使用的模型标识；同样走 DeepSeek 官方模型。 */
+        const val PHONE_MODEL = "deepseek-chat"
 
         private const val DEFAULT_TEMPERATURE = 0.0f
         private const val DEFAULT_TOP_P = 0.85f

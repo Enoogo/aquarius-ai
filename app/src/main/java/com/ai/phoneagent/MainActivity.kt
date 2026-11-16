@@ -105,9 +105,6 @@ import kotlinx.coroutines.withContext
 import com.ai.phoneagent.speech.SherpaSpeechRecognizer
 import com.ai.phoneagent.speech.SherpaSpeechRegistry
 import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.provider.Settings
 import android.net.Uri
 import android.content.Intent
@@ -915,7 +912,6 @@ class MainActivity : AppCompatActivity() {
         val currentDrawerEmptyMessage by remember { drawerEmptyMessageState }
         val currentContentAlpha by remember { homeContentAlphaState }
         val currentContentScale by remember { homeContentScaleState }
-        val aiNoticeText = remember { getString(R.string.ai_generated_notice) }
 
         DisposableEffect(drawerState, composeScope) {
             drawerStateHolder.value = drawerState
@@ -1072,7 +1068,6 @@ class MainActivity : AppCompatActivity() {
                 )
             },
             inputBarContent = { HomeInputBar() },
-            aiNoticeText = aiNoticeText,
             contentAlpha = currentContentAlpha,
             contentScale = currentContentScale,
             onboardingContent = { onboardingOverlay.Render() },
@@ -3189,7 +3184,10 @@ class MainActivity : AppCompatActivity() {
                         sendMessage(t)
                     }
                 } else {
-                    Toast.makeText(this@MainActivity, "请输入内容或添加附件", Toast.LENGTH_SHORT).show()
+                    // 没输入内容就点发送 = 新建对话：与抽屉里「新建对话」完全同一条链路。
+                    // 这里不再提示“请输入内容或添加附件”，空输入本身就是一个有效动作。
+                    hideKeyboard()
+                    startNewChat(clearUi = true)
                 }
             },
             onVoiceStart = {

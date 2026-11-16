@@ -3,11 +3,15 @@ package com.ai.phoneagent.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.ai.phoneagent.core.settings.AppUiPrefs
+import com.ai.phoneagent.core.settings.Haptics
 import com.ai.phoneagent.data.preferences.AppPreferencesRepository
 import com.ai.phoneagent.data.preferences.ThemeColorStyle
 import com.ai.phoneagent.data.preferences.ThemeMode
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -22,6 +26,20 @@ class AppearanceViewModel(
     fun setThinkingExpanded(value: Boolean) { viewModelScope.launch { mainUiPrefs.setThinkingExpandedByDefault(value) } }
     val plainMessages = mainUiPrefs.plainMessagesFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     fun setPlainMessages(value: Boolean) { viewModelScope.launch { mainUiPrefs.setPlainMessages(value) } }
+
+    /**
+     * 振动总开关（原在设置首页，“外观 → 最底部”接管）。
+     *
+     * [AppUiPrefs] 是同步读写、没有 Flow 的轻量偏好（振动回调需要在同步路径上取值），
+     * 因此这里用 [MutableStateFlow] 镜像它：打开时立刻播一次 tick，让用户听到/感到结果。
+     */
+    private val _hapticsEnabled = MutableStateFlow(AppUiPrefs.hapticsEnabled(application))
+    val hapticsEnabled: StateFlow<Boolean> = _hapticsEnabled.asStateFlow()
+    fun setHapticsEnabled(value: Boolean) {
+        AppUiPrefs.setHapticsEnabled(getApplication(), value)
+        _hapticsEnabled.value = value
+        if (value) Haptics.tap(getApplication())
+    }
 
     val themeMode: StateFlow<ThemeMode> =
         prefs.themeModeFlow

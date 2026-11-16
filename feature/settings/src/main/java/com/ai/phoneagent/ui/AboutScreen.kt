@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -63,7 +65,7 @@ import com.ai.phoneagent.feature.settings.R
  *
  * 所有可点击项通过回调上抛，页面自身不持有业务逻辑。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AboutScreen(
     appVersionText: String,
@@ -80,6 +82,7 @@ fun AboutScreen(
     onCopyContact: () -> Unit,
     onDeveloperTap: () -> Unit,
     onAliasTap: () -> Unit = {},
+    onAliasLongClick: () -> Unit = {},
 ) {
     val spacingXl = dimensionResource(DesignSystemR.dimen.m3t_spacing_xl)
 
@@ -197,21 +200,20 @@ fun AboutScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(
-                        text = stringResource(R.string.about_developer_name),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    // 底部只留一个 Enoogo：点击直接打开作者 GitHub 主页；
+                    // 长按保留原有的隐藏入口（连点解锁 Aquarius API 区段）。
                     Text(
                         text = stringResource(R.string.about_developer_alias),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(onClick = onAliasTap),
+                            .combinedClickable(
+                                onClick = onAliasTap,
+                                onLongClick = onAliasLongClick,
+                            ),
                     )
                 }
             }

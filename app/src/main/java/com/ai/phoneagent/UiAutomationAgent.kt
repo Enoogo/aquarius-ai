@@ -19,6 +19,7 @@ package com.ai.phoneagent
 
 import android.content.Context
 import com.ai.phoneagent.core.agent.ParsedAgentAction
+import com.ai.phoneagent.core.cache.ScreenshotArchive
 import com.ai.phoneagent.core.cache.ScreenshotManager
 import com.ai.phoneagent.core.cache.ScreenshotOverlayGuard
 import com.ai.phoneagent.core.config.AgentConfiguration
@@ -77,6 +78,10 @@ class UiAutomationAgent(
     private val actionExecutor =
             ActionExecutor(appContext, config, automationOverlay, appPackageManager)
     private var screenshotManager: ScreenshotManager? = null
+
+    /** 本次任务的 runId：截图存档用它归属到具体任务，日志里可按任务回看。 */
+    private var runId: String = ""
+
 
     // Tap+Type 合并执行状态
     private var userTakeoverActive = false
@@ -141,8 +146,10 @@ class UiAutomationAgent(
             task: String,
             service: PhoneAgentAccessibilityService?,
             control: Control = NoopControl,
+            runId: String = "",
             onLog: (String) -> Unit,
     ): AgentResult {
+        this.runId = runId
         val metrics = (service?.resources ?: appContext.resources).displayMetrics
         var screenW = metrics.widthPixels
         var screenH = metrics.heightPixels
@@ -329,9 +336,29 @@ class UiAutomationAgent(
             val currentApp = service?.currentAppPackage().orEmpty()
             val screenInfo = "{\"current_app\":\"${currentApp.replace("\"", "")}\"}"
 
-            // 记录截图信息
+            // 记录截图信息；同时把这张图存档，设置 → 存储 与任务日志里都能回看
+            // 「这一轮到底把什么画面交给了模型」。
             if (screenshot != null) {
-                onLog("[Step $step] 截图：${screenshot.width}x${screenshot.height}")
+                val archived =
+                        runCatching {
+                                    // 落盘可能是 1~2MB 的 PNG，放到 IO 线程，别卡住主循环。
+                                    withContext(Dispatchers.IO) {
+                                        ScreenshotArchive.saveBase64(
+                                                appContext,
+                                                screenshot.base64Png,
+                                                runId = runId,
+                                                step = step,
+                                        )
+                                    }
+                                }
+                                .getOrNull()
+                if (archived != null) {
+                    onLog(
+                            "[Step $step] 截图：${screenshot.width}x${screenshot.height} · 已存档（${archived.displayName}）"
+                    )
+                } else {
+                    onLog("[Step $step] 截图：${screenshot.width}x${screenshot.height}")
+                }
             } else {
                 onLog("[Step $step] 截图：不可用（将使用纯文本/无障碍树模式）")
             }

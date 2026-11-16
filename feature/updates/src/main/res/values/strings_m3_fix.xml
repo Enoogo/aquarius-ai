@@ -13,7 +13,7 @@
     <string name="m3t_sidebar_local_model_not_ready">本地模型未就绪，请先下载</string>
     <string name="m3t_sidebar_local_model_downloading">本地模型下载中...</string>
     <string name="m3t_sidebar_local_model_ready">本地模型已就绪</string>
-    <string name="m3t_sidebar_local_model_route_hint">本地模型模式需要配置本地/自建 OpenAI 兼容 Base URL；当前仍是智谱默认地址，请先关闭本地模型后在“第三方 API”中配置。</string>
+    <string name="m3t_sidebar_local_model_route_hint">本地模型模式需要配置本地/自建 OpenAI 兼容 Base URL；当前仍是 DeepSeek 默认地址，请先关闭本地模型后在“OpenAI 兼容”中配置。</string>
     <string name="m3t_sidebar_qwen_download">下载本地模型</string>
     <string name="m3t_sidebar_qwen_download_ready">本地模型已下载</string>
     <string name="m3t_sidebar_qwen_download_preparing">准备下载任务...</string>

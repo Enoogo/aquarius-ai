@@ -1,13 +1,14 @@
 # HANDOVER · 给下一个 AI / 开发者的交接文档
 
 > 读完这份文档你应该能在不读全部 5 万行代码的前提下继续改这个项目。
-> 最后更新：2.3.0（versionCode 24），对应交付 APK `Aquarius-AI-2.3.0-arm64.apk`。
+> 最后更新：2.4.0（versionCode 25），对应交付 APK `Aquarius-AI-2.4.0-arm64.apk`。
+> 逐版改动清单见 [CHANGELOG.md](./CHANGELOG.md)，功能总览见 [README.md](./README.md)。
 
 ---
 
 ## 0. 一句话现状
 
-`Aquarius AI` 是 `Aries-AI`（GitHub: ZG0704666/Aries-AI，AGPL-3.0）的定制改版。当前交付版本是 arm64 单架构 Release APK，能与官方原版共存安装，UI 与交互经过 5 轮需求改造，**只在沙箱里编译验证过、没有真机跑过**。
+`Aquarius AI` 是 `Aries-AI`（GitHub: ZG0704666/Aries-AI，AGPL-3.0）的定制改版。当前交付版本是 arm64 单架构 Release APK，能与官方原版共存安装，UI 与交互经过 6 轮需求改造，**只在沙箱里编译验证过、没有真机跑过**。
 
 ---
 
@@ -28,6 +29,26 @@
 ---
 
 ## 2. 版本演进（每一版做了什么）
+
+### 阶段 F · 2.4.0：图标、悬浮窗记忆、截图存档与 M3 收口（需求 7）
+
+| 需求 | 实现位置 | 关键点 |
+| --- | --- | --- |
+| 图标换 smaller 源图 | `tools/gen_icons.py`（重写）、`res/drawable/*`、`res/mipmap-*/ic_launcher*`、`aquarius_brand_logo.png`、根 `logo.png` | 源图改 `aquarius_logo_smaller.png`；比例改成常量 `RATIO_ICON=0.50` / `RATIO_LEGACY_SQUARE=0.54` / `RATIO_BRAND=0.604`，字形不再贴圆形遮罩边缘；品牌图 512×512 供关于页与主页复用 |
+| 悬浮窗位置记忆 | `AppUiPrefs.overlayFrame/setOverlayFrame`、`AutomationOverlay.show()`、`OverlayContainer.persistFrame()` | 拖动/缩放/输入态上移/「显示」回推都会写偏好；`show()` 读回后按当前屏幕夹取，屏幕尺寸变化（旋转/换屏）回落默认位置 |
+| 「隐藏/显示」同位 | `AutomationOverlay.setUserHidden` + `OverlayContainer.hideAnchorCenter()` + `showHiddenTag(w, centerX, centerY)` | 记「隐藏」两字中心相对窗口的偏移；隐藏时把标签摆到该点，恢复时用标签当前中心反推窗口坐标，实现整窗平移 |
+| 隐藏不关开关 | `AutomationOverlay._visible` | `setUserHidden` 不再改 `_visible`（它表示“功能开启”）；`showIdle` 在隐藏态等价于点「显示」，不会重复建窗 |
+| 全应用统一振动 | `core/settings/Haptics.kt`、`ConversationDrawer`、`SettingsRoute` | 只保留 `EFFECT_TICK`，删除 `KEYBOARD_TAP` 分流、设置页 30ms 自定义震动、会话列表 `LongPress` |
+| 截图存档 + 存储页 | 新 `core/cache/ScreenshotArchive.kt`、新 `ui/settings/StorageScreen.kt`、新 `ui/messages/TaskScreenshotStrip.kt`、`SettingsViewModel.SettingsPage.Storage`、`DrawerSettingsScreen` | 每步截图按 `runId` 落盘（文件名 `aq_<ts>_<runKey>_s<step>.png`）；应用内部模式保留 200 张；相册模式走 MediaStore `Pictures/AquariusAI`（无需权限）；日志展开处显示截图带 |
+| Predictive Back + 设置页不闪 + 返回预览 | `ui/components/AquariusMotion.kt`、`SettingsRoute`、`AquariusNavGraph`、`AndroidManifest`、`HomeScreen` | 设置首页常驻组合树底层，二级页为叠加其上的覆盖层；`PredictiveBackHandler` 的 `progress` 实时驱动覆盖层 `translationX`→屏宽 + 微缩(0.95)+圆角+抬升，底层首页同步 `scale 0.96→1` 放大归位，松手前即显露返回目标；松手提交 `openHomePage`、取消 spring 回弹；覆盖层触摸拦截防穿透；返回按钮走同一 `commitBack` 链；`enableOnBackInvokedCallback=true` |
+| 设置页返回不掉落 / 保留滚动位置 | `HomeScreen.kt`、`DrawerSettingsScreen.kt`、`SettingsRoute.kt` | 设置页容器顶部间距恒为状态栏高度（无纵向尺寸变化）；首页与其 `LazyListState` 常驻，二级页进出不销毁列表，返回停留原处 |
+| 底部 M3 Navigation Bar + 滑动 indicator（常驻） | `core/designsystem/.../AquariusLiquidTabs.kt`、`HomeScreen.kt` | 圆角 `surfaceContainer` 容器 + `secondaryContainer` 药丸 indicator，`Animatable`+spring 驱动单个胶囊在各 item 像素位置间平滑滑动；标签栏移到**屏幕底部**常驻（`Align.BottomCenter` + `navigationBarsPadding`），已删除 `NestedScrollConnection`/点击/`AnimatedVisibility` 收起逻辑；各页顶部 `navRegion` 归还为仅状态栏 `topInset`，底部用 `bottomNavSpace` 为标签栏让位 |
+| 空输入点发送 = 新建对话 | `MainActivity` InputBar `onSend` 的 else 分支 | 直接 `startNewChat(clearUi = true)`，删除「请输入内容或添加附件」Toast |
+| 关于页去重 Enoogo | `feature/settings/AboutScreen.kt`、`SettingsRoute`、`AboutRoute`、`about_github_url` | 只留一个可点文本 → 打开 `https://github.com/Enoogo/`；长按保留原隐藏入口（连点解锁 API 区段） |
+| 默认 API 换 DeepSeek | `AutoGlmClient`（`DEFAULT_BASE_URL/DEFAULT_MODEL/PHONE_MODEL`）、`SettingsViewModel.openApiKeyPage`、`strings*` | `https://api.deepseek.com/v1/` + `deepseek-chat`；OpenAI 兼容模式原样保留 |
+| 文档 | `README.md`（重写为功能总览）、新增 `CHANGELOG.md` | README 不再逐版罗列；版本历史进 CHANGELOG |
+
+删除/替换的旧实现：`SettingsRoute` 里的 `spring + slideInHorizontally{it}` 整屏横滑转场、`BackHandler` 返回拦截（改为 PredictiveBackHandler）、`ConversationDrawer` 的 `LocalHapticFeedback`。
 
 ### 阶段 E · 2.3.0：Material 3、双语与品牌收口（需求 6）
 
@@ -165,8 +186,8 @@ AutomationOverlay（对象，单例由 AutomationViewModel 持有）
  │    ├─ inputRow（＋展开时才 VISIBLE）
  │    └─ bottomBar: [stopAction(结束任务)] … [hideAction(隐藏/显示)]
  ├─ ring: EdgeFlowView（叠在底层，画边框 + 进度 + 颗粒）
- ├─ hiddenTagView（用户点“隐藏”后的独立小窗，显示“显示”）
- └─ _visible: StateFlow<Boolean>（设置页读这个）
+ ├─ hiddenTagView（用户点“隐藏”后的独立小窗，显示“显示”，落点即“隐藏”原位）
+ └─ _visible: StateFlow<Boolean>（“功能是否开启”，隐藏态仍为 true；设置页读这个）
 ```
 
 **触摸优先级**（`dispatchTouchEvent`，改这里前务必读一遍）：
@@ -183,7 +204,7 @@ AutomationOverlay（对象，单例由 AutomationViewModel 持有）
 | Room | `aries_tasks.db` | 任务记录，`AutomationTaskDatabase`，`MAX_RECORDS = 100` |
 | DataStore | `app_preferences` | 模型、主题、开关；键名前缀 `aries_` |
 | DataStore | `telemetry_prefs` | 安装 ID、上次心跳 |
-| SharedPreferences | `aquarius_ui_prefs` | 振动/悬浮窗/热区/颗粒/字号，同步读取 |
+| SharedPreferences | `aquarius_ui_prefs` | 振动/悬浮窗位置与尺寸/热区/颗粒/字号/截图存放位置，同步读取 |
 
 ### 3.5 主题与颜色
 

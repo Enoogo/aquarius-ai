@@ -14,7 +14,7 @@
     <string name="m3t_sidebar_local_model_not_ready">Local model not ready. Download it first.</string>
     <string name="m3t_sidebar_local_model_downloading">Downloading local model…</string>
     <string name="m3t_sidebar_local_model_ready">Local model ready</string>
-    <string name="m3t_sidebar_local_model_route_hint">Local mode needs your own OpenAI-compatible base URL. The Zhipu default is still set — turn off local mode and configure it under OpenAI-compatible.</string>
+    <string name="m3t_sidebar_local_model_route_hint">Local mode needs your own OpenAI-compatible base URL. The DeepSeek default is still set — turn off local mode and configure it under OpenAI-compatible.</string>
     <string name="m3t_sidebar_qwen_download">Download model</string>
     <string name="m3t_sidebar_qwen_download_ready">Model downloaded</string>
     <string name="m3t_sidebar_qwen_download_preparing">Preparing…</string>

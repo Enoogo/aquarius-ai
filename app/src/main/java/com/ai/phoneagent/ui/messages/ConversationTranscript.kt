@@ -2201,6 +2201,8 @@ private fun AutomationMessageCard(
                                 .heightIn(max = 280.dp)
                                 .verticalScroll(rememberScrollState()),
                     )
+                    // 日志正文下面接本次任务的全部截图：AI 当时看到的画面都能点开核对。
+                    item.runId?.let { runId -> TaskScreenshotStrip(runId = runId) }
                 }
             }
 

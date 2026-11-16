@@ -3,9 +3,6 @@ package com.ai.phoneagent.ui.components
 import android.content.Context
 import android.net.Uri
 import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import com.ai.phoneagent.core.settings.Haptics
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts

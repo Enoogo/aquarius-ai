@@ -9,38 +9,37 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.provider.Settings
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -49,11 +48,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
@@ -62,13 +61,18 @@ import com.ai.phoneagent.helper.FeedbackLogExporter
 import com.ai.phoneagent.navigation.Routes
 import com.ai.phoneagent.ui.AboutScreen
 import com.ai.phoneagent.ui.automation.AutomationControlScreen
+import com.ai.phoneagent.ui.components.M3Motion
 import com.ai.phoneagent.viewmodel.AboutViewModel
 import com.ai.phoneagent.viewmodel.AutomationViewModel
 import com.ai.phoneagent.viewmodel.SettingsViewModel
 import com.ai.phoneagent.core.designsystem.R as DesignR
 import com.ai.phoneagent.core.settings.Haptics
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.forEachGesture
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -94,9 +98,8 @@ fun SettingsRoute(
     val aquariusLoginFailedText = stringResource(R.string.aquarius_login_failed)
     val aquariusLogoutSuccessText = stringResource(R.string.aquarius_logout_success)
 
-    // 悬浮窗开关与真实窗口状态同步；振动、触控热区直接读写轻量偏好。
+    // 悬浮窗开关与真实窗口状态同步。
     val overlayVisible by automationVm.overlayVisibleFlow().collectAsState()
-    var hapticsEnabled by remember { mutableStateOf(Haptics.isEnabled(context)) }
 
     val exitSettingsRoute = remember(navController, onExitToChat) {
         exitSettingsRoute@{
@@ -110,7 +113,12 @@ fun SettingsRoute(
     }
 
     androidx.compose.runtime.LaunchedEffect(isActive) {
-        if (isActive) { viewModel.refreshLocalModelState(); automationVm.onRefreshStatus() }
+        if (isActive) {
+            viewModel.refreshLocalModelState()
+            // 语言切换会重建 Activity；状态文案由 ViewModel 缓存，这里按当前 Locale 重新解析。
+            viewModel.refreshLocalizedState()
+            automationVm.onRefreshStatus()
+        }
     }
     DisposableEffect(lifecycleOwner, viewModel, isActive) {
         val observer =
@@ -124,74 +132,118 @@ fun SettingsRoute(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val isSubPage = viewModel.currentPage != SettingsViewModel.SettingsPage.Home
-    if (isSubPage && isActive) {
-        BackHandler {
-            viewModel.openHomePage()
+    val currentPage by remember { derivedStateOf { viewModel.currentPage } }
+    val isSubPage = currentPage != SettingsViewModel.SettingsPage.Home
+
+    // 首页列表状态常驻持有（首页始终在底层渲染，滚动位置天然保留）。
+    val settingsListState = rememberLazyListState()
+
+    // 覆盖层位移：0 = 二级页完整显示；1 = 二级页被推到屏外，露出底层首页。
+    // 关键：返回时底层首页一直在渲染，覆盖层滑走即刻露出，无需等待首页首次渲染 → 不闪。
+    val dismissAnim = remember { Animatable(1f) }
+    var backInFlight by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val dismissSpring = spring<Float>(dampingRatio = 1f, stiffness = 420f)
+
+    // 进入二级页：从屏外滑入
+    LaunchedEffect(currentPage) {
+        if (isSubPage) {
+            dismissAnim.snapTo(1f)
+            dismissAnim.animateTo(0f, animationSpec = spring<Float>(dampingRatio = 1f, stiffness = 340f))
         }
     }
 
-    val currentPage by remember { derivedStateOf { viewModel.currentPage } }
-
-    AnimatedContent(
-        targetState = currentPage,
-        transitionSpec = {
-            val spec = spring<IntOffset>(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMedium
-            )
-            if (viewModel.pageTransitionForward) {
-                slideInHorizontally(
-                    animationSpec = spec,
-                    initialOffsetX = { it },
-                ) + fadeIn(animationSpec = tween(220)) togetherWith
-                    slideOutHorizontally(
-                        animationSpec = spec,
-                        targetOffsetX = { -it },
-                    ) + fadeOut(animationSpec = tween(220))
-            } else {
-                slideInHorizontally(
-                    animationSpec = spec,
-                    initialOffsetX = { -it },
-                ) + fadeIn(animationSpec = tween(220)) togetherWith
-                    slideOutHorizontally(
-                        animationSpec = spec,
-                        targetOffsetX = { it },
-                    ) + fadeOut(animationSpec = tween(220))
+    // 返回按钮与手势共用：先把覆盖层滑出，再真正切回首页
+    val commitBack: () -> Unit = {
+        if (!backInFlight && isSubPage) {
+            backInFlight = true
+            scope.launch {
+                dismissAnim.animateTo(1f, animationSpec = dismissSpring)
+                viewModel.openHomePage()
+                backInFlight = false
             }
-        },
-        label = "settingsPageTransition",
-    ) { page ->
-        when (page) {
-            SettingsViewModel.SettingsPage.Home -> {
-                DrawerSettingsScreen(
-                    onBack = exitSettingsRoute,
+        }
+    }
+
+    // 系统返回手势：跟手推走覆盖层；松手滑出并提交；取消则弹回原位
+    PredictiveBackHandler(enabled = isSubPage && isActive && !backInFlight) { events ->
+        try {
+            events.collect { event -> dismissAnim.snapTo(event.progress.coerceIn(0f, 1f)) }
+            dismissAnim.animateTo(1f, animationSpec = dismissSpring)
+            viewModel.openHomePage()
+        } catch (_: CancellationException) {
+            dismissAnim.animateTo(0f, animationSpec = dismissSpring)
+        }
+    }
+
+    // 嵌入首页（pager 第 2 页）时，上层已经用 padding 让出了状态栏高度；这里把该 inset
+    // 标记成“已消费”，二级页自己的 TopAppBar 才不会再加一遍状态栏高度——否则标题栏和
+    // 第一行会整体下移一个状态栏，看起来像“第一行没到顶”。
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(if (embedded) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier),
+    ) {
+        // 底层：设置首页常驻渲染。手势返回时它带一点点视差跟着被推走，
+        // 所以松手之前用户就已经看得到要返回的界面，返回不再是“先闪一下再到位”。
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val f = dismissAnim.value.coerceIn(0f, 1f)
+                    // f=0（二级页盖满）时目标页偏移最多，f=1（已返回）时精确回到 0。
+                    translationX = -size.width * M3Motion.PredictiveParallax * (1f - f)
+                },
+        ) {
+        DrawerSettingsScreen(
+            onBack = exitSettingsRoute,
                     embedded = embedded,
                     accountName = viewModel.aquariusLoggedInUser,
                     modelSummary = viewModel.resolveApiModel(),
-                    executionSummary = stringResource(if (automationVm.isBackgroundMode) R.string.ui_v2_background else R.string.ui_v2_foreground),
-                    confirmationSummary = stringResource(if (automationVm.autoApprove) R.string.ui_v2_confirm_enabled else R.string.ui_v2_confirm_disabled),
-                    accessibilitySummary = automationVm.accessibilityStatusText,
-                    onOpenControl = { navController.navigate(Routes.Automation.route) },
-                    onOpenPermissions = { navController.navigate(Routes.PermissionGuide.route) },
                     onOpenAccount = { viewModel.openModelApiPage() },
                     onOpenAppearance = { viewModel.navigateTo(SettingsViewModel.SettingsPage.Appearance) },
                     onOpenOverlay = { viewModel.navigateTo(SettingsViewModel.SettingsPage.Overlay) },
+                    onOpenStorage = { viewModel.navigateTo(SettingsViewModel.SettingsPage.Storage) },
                     onOpenModelApi = { viewModel.openModelApiPage() },
                     onOpenAutomation = { viewModel.navigateTo(SettingsViewModel.SettingsPage.Automation) },
                     onOpenAbout = { viewModel.navigateTo(SettingsViewModel.SettingsPage.About) },
                     overlayVisible = overlayVisible,
                     onOverlayToggle = { enabled -> automationVm.setOverlayEnabled(enabled) },
-                    hapticsEnabled = hapticsEnabled,
-                    onHapticsToggle = { enabled ->
-                        Haptics.setEnabled(context, enabled)
-                        hapticsEnabled = enabled
-                        if (enabled) Haptics.tap(context)
-                    },
+                    listState = settingsListState,
                 )
-            }
+        } // 底层视差 Box
 
-            SettingsViewModel.SettingsPage.ModelApi -> {
+        // 覆盖层：二级页在首页之上独立渲染。横向滑入/滑出，返回只动这一层，
+        // 底下的首页始终存在，不会因重新组合而闪烁或丢失滚动位置。
+        if (isSubPage) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .graphicsLayer {
+                        // M3 Predictive Back：当前页跟手水平右移，露出下面已经渲染好的首页。
+                        // 不做投影、不加圆角、不缩放——那些是系统窗口动画的视觉语言，
+                        // 叠在应用内页面上会显得生硬；这里只保留位移，滑动手感最直接。
+                        val f = dismissAnim.value.coerceIn(0f, 1f)
+                        translationX = size.width * f
+                    }
+                    // 覆盖层填满整个屏幕并吞掉未被子组件消费的触摸，防止穿透到底层首页。
+                    .pointerInput(Unit) {
+                        forEachGesture {
+                            awaitPointerEventScope {
+                                awaitFirstDown(requireUnconsumed = true)
+                                do {
+                                    val event = awaitPointerEvent()
+                                    event.changes.forEach { it.consume() }
+                                } while (event.changes.any { it.pressed })
+                            }
+                        }
+                    },
+            ) {
+            when (currentPage) {
+                // 首页在底层已渲染；此分支理论不可达（isSubPage 为 true 才进覆盖层）。
+                SettingsViewModel.SettingsPage.Home -> Unit
+                SettingsViewModel.SettingsPage.ModelApi -> {
                 DrawerModelApiConfigScreen(
                     currentApiMode = viewModel.currentApiMode,
                     apiInput = viewModel.apiInputText,
@@ -205,7 +257,7 @@ fun SettingsRoute(
                     aquariusLoggedInUser = viewModel.aquariusLoggedInUser,
                     aquariusSelectedModel = viewModel.aquariusSelectedModel,
                     onChangeAquariusModel = { viewModel.openAquariusModelSelectionDialog() },
-                    onBack = { viewModel.openHomePage() },
+                    onBack = { commitBack() },
                     onApiModeChange = { mode ->
                         viewModel.onApiModeChange(mode) { message ->
                             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -277,45 +329,54 @@ fun SettingsRoute(
             }
 
             SettingsViewModel.SettingsPage.Automation -> {
-                AutomationPreferencesScreen(onBack = { viewModel.openHomePage() },
-                    onOpenControl = { navController.navigate(Routes.Automation.route) })
+                AutomationPreferencesScreen(
+                    onBack = { commitBack() },
+                    onOpenControl = { navController.navigate(Routes.Automation.route) },
+                    onOpenPermissionGuide = { navController.navigate(Routes.PermissionGuide.route) },
+                )
             }
 
             SettingsViewModel.SettingsPage.Membership -> {
                 MembershipScreen(
                     accountName = viewModel.aquariusLoggedInUser,
                     effectiveModel = viewModel.resolveApiModel(),
-                    onBack = { viewModel.openHomePage() },
+                    onBack = { commitBack() },
                 )
             }
 
             SettingsViewModel.SettingsPage.Appearance -> {
                 AppearanceScreen(
-                    onNavigateBack = { viewModel.openHomePage() },
+                    onNavigateBack = { commitBack() },
                     onNavigateLanguage = { viewModel.navigateTo(SettingsViewModel.SettingsPage.Language) },
                 )
             }
 
             SettingsViewModel.SettingsPage.Language -> {
-                LanguageScreen(onNavigateBack = { viewModel.openHomePage() })
+                LanguageScreen(onNavigateBack = { commitBack() })
             }
 
             SettingsViewModel.SettingsPage.Overlay -> {
                 OverlaySettingsScreen(
-                    onNavigateBack = { viewModel.openHomePage() },
+                    onNavigateBack = { commitBack() },
                     overlayVisible = overlayVisible,
                     onOverlayToggle = { enabled -> automationVm.setOverlayEnabled(enabled) },
                 )
             }
 
+            SettingsViewModel.SettingsPage.Storage -> {
+                StorageScreen(onNavigateBack = { commitBack() })
+            }
+
             SettingsViewModel.SettingsPage.About -> {
                 SettingsAboutContent(
-                    onBack = { viewModel.openHomePage() },
+                    onBack = { commitBack() },
                     onNavigate = { route -> navController.navigate(route) },
                 )
             }
-        }
-    }
+            } // when
+            } // overlay Box
+        } // if (isSubPage)
+    } // outer Box
 }
 
 // 导出失败的 Toast 在非 @Composable 函数中按事件时点解析资源：组合期解析的值在 Configuration 变化后会过期，
@@ -347,29 +408,9 @@ private fun SettingsAboutContent(
     val feedbackChooserTitle = stringResource(SettingsR.string.about_feedback_share_chooser)
     val feedbackShareSubject = stringResource(SettingsR.string.about_feedback_share_subject)
 
-    val vibrateLight = {
-        try {
-            val vibrator =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val manager =
-                        context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                    manager?.defaultVibrator
-                } else {
-                    @Suppress("DEPRECATION")
-                    context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                }
-            if (vibrator != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(
-                        VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE),
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(30)
-                }
-            }
-        } catch (_: Throwable) {}
-    }
+    // 统一走全局触感入口（EFFECT_TICK），与标签页切换的震动完全一致，
+    // 不再自定义 30ms 时长与振幅。
+    val vibrateLight = { Haptics.tap(context) }
 
     AboutScreen(
         appVersionText = uiState.appVersionText,
@@ -424,7 +465,17 @@ private fun SettingsAboutContent(
             vibrateLight()
             viewModel.handleDeveloperTap()
         },
+        // 底部 Enoogo：点击打开作者 GitHub 主页，长按保留隐藏入口（连点解锁）。
         onAliasTap = {
+            Haptics.tap(context)
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(SettingsR.string.about_github_url))),
+                )
+            }
+        },
+        onAliasLongClick = {
+            Haptics.tap(context)
             viewModel.handleAliasTap()
         },
     )

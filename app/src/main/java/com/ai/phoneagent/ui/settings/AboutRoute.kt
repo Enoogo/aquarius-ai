@@ -6,9 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import com.ai.phoneagent.core.settings.Haptics
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
@@ -102,7 +99,17 @@ fun AboutRoute(
             vibrateLight()
             viewModel.handleDeveloperTap()
         },
+        // 底部 Enoogo：点击打开作者 GitHub 主页，长按保留隐藏入口（连点解锁）。
         onAliasTap = {
+            Haptics.tap(context)
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.about_github_url))),
+                )
+            }
+        },
+        onAliasLongClick = {
+            Haptics.tap(context)
             viewModel.handleAliasTap()
         },
     )

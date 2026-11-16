@@ -1,21 +1,15 @@
 package com.ai.phoneagent.navigation
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.ai.phoneagent.ui.automation.AutomationScreen
 import com.ai.phoneagent.ui.onboarding.OnboardingRoute
@@ -29,6 +23,11 @@ import com.ai.phoneagent.ui.updates.UpdateHistoryScreen
 /**
  * 应用主导航图。
  *
+ * 返回手势**不在这里拦截**：navigation-compose 2.8 起，NavHost 自己会注册
+ * `OnBackInvokedCallback` 并用可寻址（seekable）的转场跟随系统返回手势，
+ * 用户滑到一半就能看到即将返回的界面。之前这里包了一层 `PredictiveBackHandler`
+ * 把返回事件吞掉、松手才出栈，预测性返回因此完全失效。
+ *
  * @param homeContent 首页内容（由调用方注入，避免导航层依赖具体首页实现）。
  * @param onStartNextTask 在任务详情页触发「开始下一个任务」的回调。
  */
@@ -38,18 +37,6 @@ fun AquariusNavGraph(
     homeContent: @Composable () -> Unit,
     onStartNextTask: () -> Unit,
 ) {
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
-    var isRoutePopInFlight by remember(currentRoute) { mutableStateOf(false) }
-
-    // 非首页且无正在进行的出栈时才拦截返回键，防止重复出栈。
-    BackHandler(enabled = currentRoute != null && currentRoute != Routes.Home.route && !isRoutePopInFlight) {
-        isRoutePopInFlight = true
-        if (!navController.popBackStack()) {
-            isRoutePopInFlight = false
-        }
-    }
-
     NavHost(
         navController = navController,
         startDestination = Routes.Home.route,

@@ -49,11 +49,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -286,7 +284,6 @@ private fun DrawerConversationRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    val haptic = LocalHapticFeedback.current
     val hapticContext = androidx.compose.ui.platform.LocalContext.current
     var menuExpanded by remember(item.conversationId) { mutableStateOf(false) }
     val shape = RoundedCornerShape(dimensionResource(DesignR.dimen.aquarius_action_radius))
@@ -304,9 +301,8 @@ private fun DrawerConversationRow(
                         onClick = onClick,
                         onLongClickLabel = stringResource(R.string.drawer_more_actions),
                         onLongClick = {
-                            if (com.ai.phoneagent.core.settings.Haptics.isEnabled(hapticContext)) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
+                            // 统一走全局触感入口：与标签页切换完全同一种震动。
+                            com.ai.phoneagent.core.settings.Haptics.tap(hapticContext)
                             menuExpanded = true
                         },
                     )

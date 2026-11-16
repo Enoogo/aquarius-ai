@@ -58,8 +58,8 @@ android {
         applicationId = "com.ai.phoneagent.aquarius"
         minSdk = 30
         targetSdk = 36
-        versionCode = 24
-        versionName = "2.3.0"
+        versionCode = 25
+        versionName = "2.4.0"
 
         // 默认 BuildConfig 占位：实际 Token 与遥测地址在 buildTypes 中按变体覆盖。
         buildConfigField("String", "GITHUB_TOKEN", "\"\"")

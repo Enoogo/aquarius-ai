@@ -2,15 +2,13 @@ package com.ai.phoneagent.ui.home
 
 import android.content.Context
 import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import com.ai.phoneagent.core.settings.Haptics
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.ai.phoneagent.core.designsystem.theme.glass.AquariusLiquidTabs
 import com.ai.phoneagent.core.designsystem.theme.glass.LocalAquariusGlassBackdrop
+import com.ai.phoneagent.core.designsystem.theme.glass.NavBarHeight
 
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
@@ -31,7 +29,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -66,7 +63,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -124,7 +120,6 @@ fun HomeScreen(
     onNewChatClick: () -> Unit = {},
     transcriptPaneContent: @Composable (topOverlayPadding: Dp, bottomOverlayPadding: Dp, spacingMd: Dp, spacingXxxs: Dp) -> Unit,
     inputBarContent: @Composable () -> Unit,
-    aiNoticeText: String,
     contentAlpha: Float,
     contentScale: Float,
     onboardingContent: @Composable (() -> Unit)? = null,
@@ -139,7 +134,6 @@ fun HomeScreen(
     val spacingSm = dimensionResource(DesignR.dimen.m3t_spacing_sm)
     val spacingXxxs = dimensionResource(DesignR.dimen.m3t_spacing_xxxs)
 
-    val navHeight = dimensionResource(DesignR.dimen.aquarius_nav_height)
     val motionMs = integerResource(DesignR.integer.aquarius_page_motion_ms)
     val density = LocalDensity.current
     val hapticContext = LocalContext.current
@@ -190,9 +184,10 @@ fun HomeScreen(
     BackHandler(enabled = com.ai.phoneagent.navigation.homeBackAction(pager.settledPage, settingsAtRoot) == com.ai.phoneagent.navigation.HomeBackAction.HOME) {
         navigate(1)
     }
-    val navRegion =
-        WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacingSm * 2 + navHeight
-    val navVisible = pager.currentPage != 2 || settingsAtRoot
+    // 标签栏已移到底部：顶部空间归还内容，各页只保留状态栏高度作为起始留白。
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // 底部标签栏占位高度（含上下内边距），各页内容据此上移，避免被遮挡。
+    val bottomNavSpace = NavBarHeight + spacingSm * 2
     var bottomOverlayHeightPx by remember { mutableIntStateOf(0) }
     // M3 下不再有折射材质：backdrop 仅为兼容 AquariusLiquidTabs 的签名保留（空实现）。
     val navBackdrop = LocalAquariusGlassBackdrop.current
@@ -218,11 +213,11 @@ fun HomeScreen(
         ) { page ->
             when (page) {
                 0 -> Box(Modifier.fillMaxSize().navigationBarsPadding()
-                    .padding(top = navRegion + dimensionResource(DesignR.dimen.aquarius_home_hero_gap))
+                    .padding(top = topInset + dimensionResource(DesignR.dimen.aquarius_home_hero_gap))
                     .padding(
                         start = dimensionResource(DesignR.dimen.aquarius_page_padding),
                         end = dimensionResource(DesignR.dimen.aquarius_page_padding),
-                        bottom = dimensionResource(DesignR.dimen.aquarius_home_hero_gap),
+                        bottom = bottomNavSpace + dimensionResource(DesignR.dimen.aquarius_home_hero_gap),
                     )) {
                     ConversationDrawer(
                         searchQuery = drawerSearchQuery, items = drawerItems, emptyMessage = drawerEmptyMessage,
@@ -233,13 +228,13 @@ fun HomeScreen(
                         onNewChatClick = { navigate(1); onNewChatClick() },
                     )
                 }
-                1 -> Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+                1 -> Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding().padding(bottom = bottomNavSpace)) {
                     val bottomFadeHeight = dimensionResource(R.dimen.m3t_home_bottom_fade_height)
                     val bottomOverlayHeight =
                         if (bottomOverlayHeightPx > 0) with(density) { bottomOverlayHeightPx.toDp() }
                         else bottomFadeHeight
                     Box(Modifier.fillMaxSize().clipToBounds()) {
-                        transcriptPaneContent(navRegion, bottomOverlayHeight, spacingMd, spacingXxxs)
+                        transcriptPaneContent(topInset, bottomOverlayHeight, spacingMd, spacingXxxs)
                     }
                     Box(
                         modifier = Modifier
@@ -262,9 +257,7 @@ fun HomeScreen(
                             ),
                     )
                     HomeBottomOverlay(
-                        aiNoticeText = aiNoticeText,
                         inputBarContent = inputBarContent,
-                        spacingXxxs = spacingXxxs,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
@@ -273,24 +266,27 @@ fun HomeScreen(
                             },
                     )
                 }
-                2 -> Box(Modifier.fillMaxSize().padding(top = if (settingsAtRoot) navRegion else 0.dp)) {
+                2 -> Box(Modifier.fillMaxSize().padding(top = topInset).padding(bottom = bottomNavSpace)) {
                     settingsContent(pager.currentPage == 2)
                 }
             }
         }
-        if (navVisible) {
-            // Material 3 主导航：通栏 PrimaryTabRow（图标 + 文字，主色指示条），
-            // 取代原来的液态玻璃胶囊 + 可拖动滑块。
+        // 底部主导航：常驻显示，M3 Navigation Bar 样式。三页内容已分别为其让位，
+        // 顶部空间归还给各页面，不再有滚动/点击收起逻辑。
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = spacingMd, vertical = spacingSm),
+        ) {
             AquariusLiquidTabs(
                 selectedIndex = pager.settledPage,
                 onSelect = { page -> hapticTick(hapticContext); navigate(page) },
                 progress = { pager.currentPage + pager.currentPageOffsetFraction },
                 pagerScrolling = { pager.isScrollInProgress && navigationTarget < 0 },
                 backdrop = navBackdrop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(top = spacingSm),
+                modifier = Modifier.fillMaxWidth(),
                 tabCount = 3,
                 onEdgeHaptic = { hapticTick(hapticContext) },
             ) { index ->
@@ -302,7 +298,7 @@ fun HomeScreen(
     }
 }
 
-/** 顶部胶囊导航的单个页签内容（跨三层复用：可见层、折射副本层）。 */
+/** M3 Navigation Bar 单个标签内容：图标在上、文字在下的垂直排列。 */
 @Composable
 private fun HomeNavTab(index: Int, selected: Boolean) {
     val icon = when (index) {
@@ -318,31 +314,32 @@ private fun HomeNavTab(index: Int, selected: Boolean) {
         }
     )
     val colors = MaterialTheme.colorScheme
-    Row(
+    // 选中态文字/图标用 onSecondaryContainer，与药丸 indicator 的 secondaryContainer 成对。
+    val activeColor = colors.onSecondaryContainer
+    val inactiveColor = colors.onSurfaceVariant
+    Column(
         Modifier
             .fillMaxSize()
-            // 对齐参考：可见层保持 1x，仅折射副本层由 CompositionLocal 放大；
-            // 这里不能再乘一次，否则副本图标会被放大 1.2×1.2。
             .semantics { this.selected = selected },
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             icon,
             contentDescription = null,
             modifier = Modifier.size(dimensionResource(DesignR.dimen.aquarius_nav_icon)),
-            tint = if (selected) colors.primary else colors.onSurfaceVariant,
+            tint = if (selected) activeColor else inactiveColor,
         )
         Text(
             label,
-            Modifier.padding(start = dimensionResource(DesignR.dimen.m3t_spacing_xxxs)),
+            Modifier.padding(top = dimensionResource(DesignR.dimen.m3t_spacing_xxxs)),
             style = MaterialTheme.typography.labelSmall.copy(
                 fontSize = with(LocalDensity.current) {
                     dimensionResource(DesignR.dimen.aquarius_nav_text).toSp()
                 },
             ),
-            color = if (selected) colors.onSurface else colors.onSurfaceVariant,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) activeColor else inactiveColor,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
         )
     }
 }
@@ -517,9 +514,7 @@ private fun HomeTranscriptAutoFollowController(
 
 @Composable
 private fun HomeBottomOverlay(
-    aiNoticeText: String,
     inputBarContent: @Composable () -> Unit,
-    spacingXxxs: Dp,
     modifier: Modifier = Modifier,
 ) {
     DebugRecomposeLogger(scope = "HomeBottomOverlay")
@@ -530,12 +525,6 @@ private fun HomeBottomOverlay(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         inputBarContent()
-        Text(
-            text = aiNoticeText,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = spacingXxxs),
-        )
     }
 }
 

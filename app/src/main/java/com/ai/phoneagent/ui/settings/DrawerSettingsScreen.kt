@@ -17,8 +17,6 @@ import androidx.compose.foundation.background
 import com.composables.icons.lucide.CircleHelp
 import com.composables.icons.lucide.Palette
 import com.composables.icons.lucide.Smartphone
-import com.composables.icons.lucide.ShieldCheck
-import com.composables.icons.lucide.Accessibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +35,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +47,7 @@ import com.composables.icons.lucide.CircleCheck
 import com.composables.icons.lucide.Cloud
 import com.composables.icons.lucide.Crown
 import com.composables.icons.lucide.Download
+import com.composables.icons.lucide.Images
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.KeyRound
 import com.composables.icons.lucide.Cpu
@@ -69,7 +69,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.Switch
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
@@ -88,7 +87,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.dimensionResource
@@ -99,7 +97,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ai.phoneagent.R
 import com.ai.phoneagent.core.designsystem.theme.AquariusMaterialTheme
-import com.ai.phoneagent.core.settings.AppUiPrefs
 import com.ai.phoneagent.core.designsystem.theme.AquariusSoftHairline
 import com.ai.phoneagent.core.designsystem.theme.aquariusGlass
 import com.ai.phoneagent.core.designsystem.theme.ThemeMode
@@ -141,19 +138,14 @@ fun DrawerSettingsScreen(
     onOpenAutomation: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenOverlay: () -> Unit = onOpenAutomation,
+    onOpenStorage: () -> Unit = onOpenOverlay,
     embedded: Boolean = false,
     accountName: String = "",
     onOpenAccount: () -> Unit = onOpenModelApi,
     modelSummary: String = "",
-    executionSummary: String = "",
-    confirmationSummary: String = "",
-    accessibilitySummary: String = "",
-    onOpenControl: () -> Unit = onOpenAutomation,
-    onOpenPermissions: () -> Unit = onOpenAutomation,
     overlayVisible: Boolean = false,
     onOverlayToggle: (Boolean) -> Unit = {},
-    hapticsEnabled: Boolean = true,
-    onHapticsToggle: (Boolean) -> Unit = {},
+    listState: LazyListState = rememberLazyListState(),
 ) {
     val padding = dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.aquarius_page_padding)
     val gap = dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.aquarius_card_gap)
@@ -166,8 +158,8 @@ fun DrawerSettingsScreen(
         SettingsEntryUi(SettingsEntryType.About, stringResource(R.string.ui_v2_about_title), stringResource(R.string.ui_v2_about_hint), Lucide.CircleHelp),
     )
     LazyColumn(
-        Modifier.fillMaxSize().navigationBarsPadding().clipToBounds(),
-        state = rememberLazyListState(),
+        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().clipToBounds(),
+        state = listState,
         contentPadding = PaddingValues(horizontal = padding, vertical = inner), 
         verticalArrangement = Arrangement.spacedBy(gap)
     ) {
@@ -213,39 +205,29 @@ fun DrawerSettingsScreen(
                     }
                 }
             }
-            // 振动开关放在“关于与帮助”上方。
+            // “模型与 API”之后依次是“存储”与“自动化”：自动化固定排在“关于与帮助”上方，
+            // 样式与其它入口完全一致（图标 + 标题 + 说明 + 箭头），不再内联开关行。
             if (entry.type == SettingsEntryType.ModelApi) {
                 item {
-                    HapticsSettingsCard(
-                        enabled = hapticsEnabled,
-                        onToggle = onHapticsToggle,
-                    )
-                }
-            }
-        }
-        item {
-            Surface(modifier = Modifier.fillMaxWidth().aquariusGlass(cardShape), shape = cardShape,
-                color = Color.Transparent, contentColor = colors.onSurface) {
-                Column(Modifier.padding(inner)) {
-                    Text(stringResource(R.string.ui_v2_quick_settings), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.ui_v2_quick_settings_hint), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                    val rows = listOf(
-                        Triple(stringResource(R.string.automation_execution_mode_label), executionSummary, Lucide.Smartphone),
-                        Triple(stringResource(R.string.ui_v2_auto_confirmation), confirmationSummary, Lucide.ShieldCheck),
-                        Triple(stringResource(R.string.automation_status_accessibility_short_label), accessibilitySummary, Lucide.Accessibility),
-                    )
-                    rows.forEachIndexed { index, row ->
-                        SettingsGlassRow(row.first, row.second, row.third,
-                            Modifier.clickable(onClick = if (index == 2) onOpenPermissions else onOpenAutomation).padding(vertical = gap))
+                    Surface(onClick = onOpenStorage, modifier = Modifier.fillMaxWidth().aquariusGlass(cardShape),
+                        shape = cardShape, color = Color.Transparent, contentColor = colors.onSurface) {
+                        SettingsGlassRow(
+                            title = stringResource(R.string.settings_section_storage),
+                            subtitle = stringResource(R.string.settings_section_storage_hint),
+                            icon = Lucide.Images,
+                            modifier = Modifier.padding(horizontal = inner, vertical = padding + gap),
+                        )
                     }
-                    AquariusLiquidButton(
-                        onClick = onOpenControl,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.aquarius_action_radius)),
-                        contentPadding = PaddingValues(gap),
-                    ) {
-                        Icon(Lucide.Cpu, null, Modifier.size(inner), tint = colors.primary)
-                        Text(stringResource(R.string.ui_v2_open_control), style = MaterialTheme.typography.bodySmall)
+                }
+                item {
+                    Surface(onClick = onOpenAutomation, modifier = Modifier.fillMaxWidth().aquariusGlass(cardShape),
+                        shape = cardShape, color = Color.Transparent, contentColor = colors.onSurface) {
+                        SettingsGlassRow(
+                            title = stringResource(R.string.settings_entry_automation_title),
+                            subtitle = stringResource(R.string.settings_entry_automation_subtitle),
+                            icon = Lucide.Sparkles,
+                            modifier = Modifier.padding(horizontal = inner, vertical = padding + gap),
+                        )
                     }
                 }
             }
@@ -523,8 +505,6 @@ fun DrawerModelApiConfigScreen(
                 )
             }
         }
-    val statusContainerColor = MaterialTheme.colorScheme.surfaceVariant
-    val statusContentColor = MaterialTheme.colorScheme.onSurfaceVariant
     val statusNotCheckedText = stringResource(R.string.m3t_sidebar_api_not_checked)
     val statusCheckingText = stringResource(R.string.settings_api_checking)
     val statusPillContainerColor =
@@ -757,7 +737,7 @@ private fun SectionIntro(
             color = MaterialTheme.colorScheme.onSurface,
         )
         if (tooltipText != null) {
-            Spacer(modifier = Modifier.width(dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.m3t_spacing_xs)))
+            Spacer(Modifier.width(dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.m3t_spacing_xs)))
             InfoTooltip(tooltipText = tooltipText)
         }
     }
@@ -935,83 +915,5 @@ private fun DrawerSettingsScreenDarkPreview() {
             onOpenAutomation = {},
             onOpenAbout = {},
         )
-    }
-}
-
-/** 设置里的通用开关行：标题 + 说明 + Switch，整行可点。 */
-@Composable
-private fun SettingsSwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    icon: ImageVector,
-) {
-    val gap = dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.aquarius_home_icon_gap)
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable { onCheckedChange(!checked) }
-                .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(gap),
-    ) {
-        Icon(
-            icon,
-            null,
-            Modifier.size(dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.aquarius_composer_icon)),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-/** 振动总开关，放在“关于与帮助”上方。 */
-@Composable
-private fun HapticsSettingsCard(
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
-    val cardShape =
-        RoundedCornerShape(dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.aquarius_card_radius))
-    val inner = dimensionResource(com.ai.phoneagent.core.designsystem.R.dimen.m3t_spacing_md)
-    Surface(
-        modifier = Modifier.fillMaxWidth().aquariusGlass(cardShape),
-        shape = cardShape,
-        color = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-    ) {
-        Column(Modifier.padding(inner)) {
-            Text(
-                stringResource(R.string.settings_section_haptics),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            SettingsSwitchRow(
-                title = stringResource(R.string.settings_haptics_title),
-                subtitle =
-                    stringResource(
-                        if (enabled) R.string.settings_haptics_subtitle_on
-                        else R.string.settings_haptics_subtitle_off
-                    ),
-                checked = enabled,
-                onCheckedChange = onToggle,
-                icon = Lucide.Smartphone,
-            )
-        }
     }
 }
