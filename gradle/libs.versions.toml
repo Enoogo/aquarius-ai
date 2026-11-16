@@ -73,7 +73,7 @@ jetbrains-markdown = { module = "org.jetbrains:markdown", version.ref = "jetbrai
 quickjs-kt = { module = "io.github.dokar3:quickjs-kt", version.ref = "quickjsKt" }
 jlatexmath-android = { module = "ru.noties:jlatexmath-android", version.ref = "jlatexmath" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
-compose-icons-lucide = { module = "com.composables:icons-lucide-android", version = "1.1.0" }
+compose-icons-lucide = { module = "com.composables:icons-lucide-android", version = "2.2.1" }
 multiplatform-markdown-renderer = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
