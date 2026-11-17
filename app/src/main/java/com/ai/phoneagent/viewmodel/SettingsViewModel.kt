@@ -32,18 +32,6 @@ class SettingsViewModel(
     private val modelScopeModelDownloader: ModelScopeModelDownloader,
 ) : AndroidViewModel(application) {
 
-    enum class SettingsPage {
-        Home,
-        ModelApi,
-        Membership,
-        Appearance,
-        Language,
-        Overlay,
-        Storage,
-        Automation,
-        About,
-    }
-
     enum class ApiMode {
         Official,
         ThirdParty,
@@ -60,12 +48,6 @@ class SettingsViewModel(
     private var apiModePersistJob: Job? = null
 
     var localModelReady by mutableStateOf(false)
-        private set
-
-    var currentPage by mutableStateOf(SettingsPage.Home)
-        private set
-
-    var pageTransitionForward by mutableStateOf(true)
         private set
 
     var apiInputText by mutableStateOf("")
@@ -226,26 +208,6 @@ class SettingsViewModel(
         localModelReady = modelScopeModelDownloader.isQwen35ModelReady(getApplication())
         updateQwenDownloadButtonState()
         updateStatusText()
-    }
-
-    fun openModelApiPage() {
-        pageTransitionForward = true
-        currentPage = SettingsPage.ModelApi
-    }
-
-    fun openMembershipPage() {
-        pageTransitionForward = true
-        currentPage = SettingsPage.Membership
-    }
-
-    fun openHomePage() {
-        pageTransitionForward = false
-        currentPage = SettingsPage.Home
-    }
-
-    fun navigateTo(page: SettingsPage) {
-        pageTransitionForward = page != SettingsPage.Home
-        currentPage = page
     }
 
     fun onApiModeChange(mode: ApiMode, onToast: (String) -> Unit) {

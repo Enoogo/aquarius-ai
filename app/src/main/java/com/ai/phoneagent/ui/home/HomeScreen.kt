@@ -116,7 +116,6 @@ fun HomeScreen(
     onDrawerSearchQueryChange: (String) -> Unit,
     onDrawerConversationClick: (Long) -> Unit,
     onDrawerConversationLongClick: (Long) -> Unit,
-    onDrawerSettingsClick: () -> Unit,
     onNewChatClick: () -> Unit = {},
     transcriptPaneContent: @Composable (topOverlayPadding: Dp, bottomOverlayPadding: Dp, spacingMd: Dp, spacingXxxs: Dp) -> Unit,
     inputBarContent: @Composable () -> Unit,
@@ -127,7 +126,6 @@ fun HomeScreen(
     onDrawerClosed: () -> Unit = {},
     selectedPage: Int = 1,
     onPageSelected: (Int) -> Unit = {},
-    settingsAtRoot: Boolean = true,
     settingsContent: @Composable (Boolean) -> Unit = {},
 ) {
     val spacingMd = dimensionResource(DesignR.dimen.aquarius_page_padding)
@@ -181,7 +179,7 @@ fun HomeScreen(
             drawerState.close()
         } else onDrawerClosed()
     }
-    BackHandler(enabled = com.ai.phoneagent.navigation.homeBackAction(pager.settledPage, settingsAtRoot) == com.ai.phoneagent.navigation.HomeBackAction.HOME) {
+    BackHandler(enabled = com.ai.phoneagent.navigation.homeBackAction(pager.settledPage) == com.ai.phoneagent.navigation.HomeBackAction.HOME) {
         navigate(1)
     }
     // 标签栏已移到底部：顶部空间归还内容，各页只保留状态栏高度作为起始留白。
@@ -200,7 +198,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
             beyondViewportPageCount = 1,
             pageNestedScrollConnection = horizontalPageConnection,
-            userScrollEnabled = drawerGesturesEnabled && settingsAtRoot,
+            userScrollEnabled = drawerGesturesEnabled,
             flingBehavior = PagerDefaults.flingBehavior(
                 pager,
                 // 对齐参考 DampedDragAnimation 的 spring(1f, 1000f)：临界阻尼、无回弹，
@@ -212,7 +210,7 @@ fun HomeScreen(
             ),
         ) { page ->
             when (page) {
-                0 -> Box(Modifier.fillMaxSize().navigationBarsPadding()
+                0 -> Box(Modifier.fillMaxSize().clipToBounds().navigationBarsPadding()
                     .padding(top = topInset + dimensionResource(DesignR.dimen.aquarius_home_hero_gap))
                     .padding(
                         start = dimensionResource(DesignR.dimen.aquarius_page_padding),
@@ -228,7 +226,7 @@ fun HomeScreen(
                         onNewChatClick = { navigate(1); onNewChatClick() },
                     )
                 }
-                1 -> Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding().padding(bottom = bottomNavSpace)) {
+                1 -> Box(Modifier.fillMaxSize().clipToBounds().navigationBarsPadding().imePadding().padding(bottom = bottomNavSpace)) {
                     val bottomFadeHeight = dimensionResource(R.dimen.m3t_home_bottom_fade_height)
                     val bottomOverlayHeight =
                         if (bottomOverlayHeightPx > 0) with(density) { bottomOverlayHeightPx.toDp() }
@@ -266,7 +264,9 @@ fun HomeScreen(
                             },
                     )
                 }
-                2 -> Box(Modifier.fillMaxSize().padding(top = topInset).padding(bottom = bottomNavSpace)) {
+                // 标签页里的内容一律裁剪到本页范围内：任何一页内部的位移/缩放都不会
+                // 溢出到相邻页（之前设置页里的自绘容器位移，曾在主页右边留下一条残影）。
+                2 -> Box(Modifier.fillMaxSize().clipToBounds().padding(top = topInset).padding(bottom = bottomNavSpace)) {
                     settingsContent(pager.currentPage == 2)
                 }
             }

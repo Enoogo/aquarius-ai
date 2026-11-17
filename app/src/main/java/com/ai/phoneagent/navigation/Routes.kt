@@ -4,7 +4,22 @@ package com.ai.phoneagent.navigation
 sealed class Routes(val route: String) {
     data object Home : Routes("home")
     data object Settings : Routes("settings")
-    data object About : Routes("about")
+
+    /**
+     * 设置二级页。
+     *
+     * 每一级都是独立目的地（不再在设置首页内部叠一层自绘容器）：
+     * 前进/返回统一走 NavHost 的转场与预测性返回，层级再多也只有一条返回链。
+     */
+    data object SettingsAppearance : Routes("settings/appearance")
+    data object SettingsLanguage : Routes("settings/language")
+    data object SettingsOverlay : Routes("settings/overlay")
+    data object SettingsStorage : Routes("settings/storage")
+    data object SettingsAutomation : Routes("settings/automation")
+    data object SettingsModelApi : Routes("settings/modelApi")
+    data object SettingsMembership : Routes("settings/membership")
+    data object SettingsAbout : Routes("settings/about")
+
     data object UserAgreement : Routes("userAgreement")
     data object Licenses : Routes("licenses")
     data object Automation : Routes("automation")

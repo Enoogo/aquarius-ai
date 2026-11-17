@@ -1,0 +1,28 @@
+// 本机网络只对部分域名有 IPv4 DNS（github.com 直接解析失败，Maven Central 只返回 IPv6），
+// 因此用阿里云镜像优先解析依赖；项目自身的 settings.gradle.kts 不改动。
+// 用法：gradlew -I D:\AndroidDevelopment\gradle-init.gradle ...
+beforeSettings { settings ->
+    settings.pluginManagement.repositories {
+        maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url = 'https://maven.aliyun.com/repository/public' }
+        maven { url = 'https://maven.aliyun.com/repository/google' }
+    }
+    try {
+        settings.dependencyResolutionManagement.repositories {
+            maven { url = 'https://maven.aliyun.com/repository/google' }
+            maven { url = 'https://maven.aliyun.com/repository/public' }
+        }
+    } catch (Throwable ignored) {
+        // 某些 Gradle 版本在 beforeSettings 阶段还不允许访问该容器，settingsEvaluated 里再补一次。
+    }
+}
+
+settingsEvaluated { settings ->
+    try {
+        settings.dependencyResolutionManagement.repositories {
+            maven { url = 'https://maven.aliyun.com/repository/google' }
+            maven { url = 'https://maven.aliyun.com/repository/public' }
+        }
+    } catch (Throwable ignored) {
+    }
+}

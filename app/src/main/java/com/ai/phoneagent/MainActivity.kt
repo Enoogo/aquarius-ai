@@ -194,6 +194,7 @@ import com.ai.phoneagent.navigation.AquariusNavGraph
 import com.ai.phoneagent.navigation.Routes
 import com.ai.phoneagent.ui.home.HomeScreen
 import com.ai.phoneagent.viewmodel.AutomationViewModel
+import com.ai.phoneagent.viewmodel.SettingsViewModel
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.rememberDrawerState
@@ -732,6 +733,10 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             val automationVm: AutomationViewModel = org.koin.androidx.compose.koinViewModel(viewModelStoreOwner = this@MainActivity)
+            // 设置相关界面（首页列表 + 各二级页）共用同一个 Activity 级实例，
+            // 否则浏览器式的多入口会各自持有一份状态。
+            val settingsViewModel: SettingsViewModel =
+                org.koin.androidx.compose.koinViewModel(viewModelStoreOwner = this@MainActivity)
             DisposableEffect(automationVm) {
                 automationVm.attachHostActivity(this@MainActivity)
                 onDispose { automationVm.attachHostActivity(null) }
@@ -837,12 +842,16 @@ class MainActivity : AppCompatActivity() {
 
                 AquariusNavGraph(
                     navController = navController,
+                    settingsViewModel = settingsViewModel,
+                    automationViewModel = automationVm,
                     onStartNextTask = {
                         selectedMainPage = 1
                         navController.popBackStack(Routes.Home.route, false)
                     },
                     homeContent = {
                         HomeRoute(
+                            settingsViewModel = settingsViewModel,
+                            automationViewModel = automationVm,
                             codeBlockPrefs = codeBlockPrefs,
                         )
                     },
@@ -894,12 +903,18 @@ class MainActivity : AppCompatActivity() {
 
     @Composable
     private fun HomeRoute(
+        settingsViewModel: SettingsViewModel,
+        automationViewModel: AutomationViewModel,
         codeBlockPrefs: CodeBlockPrefs,
     ) {
         DebugRecomposeLogger(scope = "HomeRoute")
-        val settingsVm: com.ai.phoneagent.viewmodel.SettingsViewModel = org.koin.androidx.compose.koinViewModel()
+        // 外部入口（Intent / 快捷方式）要求直接打开“模型与 API”：现在它是独立目的地，
+        // 交给导航动作即可，不再需要 ViewModel 里维护一套页码。
         LaunchedEffect(openModelPage) {
-            if (openModelPage) { settingsVm.openModelApiPage(); openModelPage = false }
+            if (openModelPage) {
+                openModelPage = false
+                routeNavigationActionState.value?.invoke(Routes.SettingsModelApi.route)
+            }
         }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val composeScope = rememberCoroutineScope()
@@ -966,12 +981,6 @@ class MainActivity : AppCompatActivity() {
                 if (deleteConversationById(conversationId, clearUiForActive = true)) {
                     vibrateLight()
                 }
-            }
-        }
-        val onDrawerSettingsClick = remember {
-            {
-                vibrateLight()
-                navigateToRoute(Routes.Settings.route, closeDrawerFirst = true)
             }
         }
         val onCopyMessage: (TranscriptMessageUi) -> Unit = remember {
@@ -1048,7 +1057,6 @@ class MainActivity : AppCompatActivity() {
             onDrawerSearchQueryChange = onDrawerSearchQueryChange,
             onDrawerConversationClick = onDrawerConversationClick,
             onDrawerConversationLongClick = onDrawerConversationLongClick,
-            onDrawerSettingsClick = onDrawerSettingsClick,
             onNewChatClick = {
                 vibrateLight()
                 startNewChat(clearUi = true)
@@ -1078,12 +1086,15 @@ class MainActivity : AppCompatActivity() {
                 selectedMainPage = page
                 if (page != 1) clearAutomationAutoConfirm() else syncAutomationAutoConfirmState()
             },
-            settingsAtRoot = settingsVm.currentPage == com.ai.phoneagent.viewmodel.SettingsViewModel.SettingsPage.Home,
             settingsContent = { active ->
                 navControllerState.value?.let { controller ->
                     com.ai.phoneagent.ui.settings.SettingsRoute(
-                        navController = controller, viewModel = settingsVm,
-                        isActive = active, onExitToChat = { selectedMainPage = 1 }, embedded = true,
+                        navController = controller,
+                        viewModel = settingsViewModel,
+                        automationViewModel = automationViewModel,
+                        isActive = active,
+                        onExitToChat = { selectedMainPage = 1 },
+                        embedded = true,
                     )
                 }
             },

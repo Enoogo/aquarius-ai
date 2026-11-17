@@ -3,6 +3,9 @@
 Aquarius AI 是 [Aries-AI](https://github.com/ZG0704666/Aries-AI) 的定制改版（AGPL-3.0-only）。
 本文件只放"AI 动手前必须知道"的硬约束；完整背景见 [README.md](./README.md)，逐版改动与架构细节见 [HANDOVER.md](./HANDOVER.md)。
 
+> **先读 [HANDOVER-AI.md](./HANDOVER-AI.md)**：那里面有本机工具链路径（JDK 17 / Android SDK / Gradle 缓存都在 `D:\AndroidDevelopment`）、
+> 代理与镜像的绕行办法、以及改源码时绝对不能用的 PowerShell 命令。
+
 ## 事实来源
 
 - 工具链以 `app/build.gradle.kts`、`gradle/libs.versions.toml`、`settings.gradle.kts` 为准：JDK 17、Gradle 9.4.1、AGP 9.2.1、Kotlin 2.4.10、KSP、compileSdk 37 / targetSdk 36 / minSdk 30。

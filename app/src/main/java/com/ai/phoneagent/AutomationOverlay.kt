@@ -1527,6 +1527,8 @@ class AutomationOverlay(
                         downY = layoutParams.y
                         downW = if (layoutParams.width > 0) layoutParams.width else width
                         downH = if (layoutParams.height > 0) layoutParams.height else height
+                        // 抓住边角的一刻就把边框点亮成实色蓝，松手再恢复。
+                        ring.setCornerHighlight(true)
                         return true
                     }
                 }
@@ -1541,6 +1543,7 @@ class AutomationOverlay(
                     if (resizing) {
                         resizing = false
                         resizeCorner = 0
+                        ring.setCornerHighlight(false)
                         // 缩放结束即记下尺寸与位置，下次打开沿用。
                         persistFrame()
                         return true
@@ -1740,6 +1743,14 @@ class AutomationOverlay(
         private var phase: Float = 0f
         private var inputVerifyHighlight: Boolean = false
 
+        /**
+         * 四角缩放热区是否被按住。
+         *
+         * 按下热区时整圈描边切换为实色品牌蓝（与进度弧同色），松手立刻回到原本的浅色描边——
+         * 让用户明确知道“现在抓住的是边角缩放”，而不是在拖窗口。
+         */
+        private var cornerHighlight: Boolean = false
+
         /** 是否运行边框颗粒动画。关闭时连 animator 都不启动，避免空转耗电。 */
         private var particlesEnabled: Boolean = true
 
@@ -1763,6 +1774,14 @@ class AutomationOverlay(
         fun setInputVerifyHighlight(active: Boolean) {
             if (inputVerifyHighlight == active) return
             inputVerifyHighlight = active
+            rebuildPath()
+            invalidate()
+        }
+
+        /** 四角缩放热区按下/松开时切换整圈描边的高亮状态。 */
+        fun setCornerHighlight(active: Boolean) {
+            if (cornerHighlight == active) return
+            cornerHighlight = active
             rebuildPath()
             invalidate()
         }
@@ -1862,8 +1881,9 @@ class AutomationOverlay(
             }
 
             // 边框使用非常浅的 #3964FE（约 12% 不透明度），进度/流光才是实色主蓝。
-            trackPaint.alpha = 30
-            progressPaint.alpha = 170
+            // 按住四角缩放热区时把描边提到实色，松手恢复浅色。
+            trackPaint.alpha = if (cornerHighlight) 255 else 30
+            progressPaint.alpha = if (cornerHighlight) 255 else 170
 
             borderPath.reset()
             borderPath.addRoundRect(rect, r, r, Path.Direction.CW)

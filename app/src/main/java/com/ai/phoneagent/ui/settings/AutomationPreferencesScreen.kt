@@ -1,8 +1,6 @@
 package com.ai.phoneagent.ui.settings
 
 import com.ai.phoneagent.ui.components.AquariusPageTopBar
-import android.app.Activity
-import android.content.ContextWrapper
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
@@ -10,11 +8,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.lifecycle.ViewModelStoreOwner
 import com.ai.phoneagent.R
 import com.ai.phoneagent.core.designsystem.theme.AquariusGlassButton
 import com.ai.phoneagent.core.designsystem.theme.AquariusGlassCard
@@ -22,7 +18,6 @@ import com.ai.phoneagent.viewmodel.AutomationViewModel
 import com.ai.phoneagent.core.designsystem.theme.AquariusSettingsSwitchItem
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Smartphone
-import org.koin.androidx.compose.koinViewModel
 
 /**
  * 自动化偏好设置页：任务状态、执行模式、自动确认开关、无障碍状态，以及自动化面板入口。
@@ -38,15 +33,9 @@ fun AutomationPreferencesScreen(
     onBack: () -> Unit,
     onOpenControl: () -> Unit,
     onOpenPermissionGuide: () -> Unit,
+    automationViewModel: AutomationViewModel,
 ) {
-    val context = LocalContext.current
-    // 向上查找承载的 Activity，作为共享的 ViewModelStoreOwner
-    val owner = remember(context) {
-        var current = context
-        while (current is ContextWrapper && current !is Activity) current = current.baseContext
-        current as ViewModelStoreOwner
-    }
-    val vm: AutomationViewModel = koinViewModel(viewModelStoreOwner = owner)
+    val vm = automationViewModel
     val task by vm.taskSnapshot.collectAsState()
     // 无任务或任务已结束时才允许修改配置
     val editable = task == null || task?.status?.isTerminal == true
